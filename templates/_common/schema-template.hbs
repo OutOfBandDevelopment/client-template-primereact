@@ -1,0 +1,22 @@
+{{!--
+This is template to generate a type name from swagger/open-api definitions
+--}}{{~#if @schema.type~}}
+    {{~#if-any @schema.type "integer"~}}
+        number
+    {{~else~}}
+        {{~#if-any @schema.type "array"~}}
+            {{~import template="_common/schema-template" schema=@schema.items notNullable=true~}}[]
+        {{~else~}}
+            {{~@schema.type~}}
+        {{~/if-any}}
+    {{~/if-any}}
+{{~else~}}
+    {{~#if @schema.$ref~}}
+        I{{~str-element (str-element @schema.$ref "/" "@last") "." "@last"~}}
+    {{~else~}}
+        any
+    {{~/if~}}
+{{~/if~}}
+{{~#if @notNullable~}}
+{{~else}} | undefined
+{{~/if~}}

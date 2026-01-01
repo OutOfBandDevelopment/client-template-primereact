@@ -1,0 +1,80 @@
+{{ import "_common/file_header.ts" }}
+
+## Routes
+
+```TypeScript
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { GreenOnionRoutes } from './pages/GreenOnion/Routes';
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Other routes */}
+        <Route path="/" element={<Home />} />
+        
+        {/* GreenOnion routes - nested under /GreenOnion */}
+        <Route path="/GreenOnion/*" element={<GreenOnionRoutes />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+```
+
+## Navigation 
+
+```TypeScript
+import { useNavigate } from 'react-router-dom';
+import { greenOnionRouteDefinitions } from './pages/GreenOnion/Routes';
+import { PanelMenu } from 'primereact/panelmenu';
+
+function Sidebar() {
+  const navigate = useNavigate();
+
+  const menuItems = greenOnionRouteDefinitions.map(group => ({
+    label: group.label,
+    icon: group.icon,
+    items: group.items.map(item => ({
+      label: item.label,
+      icon: item.icon,
+      command: () => navigate(item.path),
+      items: item.children?.map(child => ({
+        label: child.label,
+        icon: child.icon,
+        command: () => navigate(child.path),
+      })),
+    })),
+  }));
+
+  return <PanelMenu model={menuItems} />;
+}
+```
+
+{{~call template="pages/GreenOnion/Demo/ComboBoxes/index.tsx"
+        name="pages/GreenOnion/Demo/ComboBoxes/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/ComboBoxes/index.scss"
+        name="pages/GreenOnion/Demo/ComboBoxes/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/MultiSelects/index.tsx"
+        name="pages/GreenOnion/Demo/MultiSelects/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/MultiSelects/index.scss"
+        name="pages/GreenOnion/Demo/MultiSelects/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/DataGrids/index.tsx"
+        name="pages/GreenOnion/Demo/DataGrids/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/DataGrids/index.scss"
+        name="pages/GreenOnion/Demo/DataGrids/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/PropertyEditors/index.tsx"
+        name="pages/GreenOnion/Demo/PropertyEditors/index"
+        }}
+{{~call template="pages/GreenOnion/Demo/PropertyEditors/index.scss"
+        name="pages/GreenOnion/Demo/PropertyEditors/index"
+        }}    
+        
+{{~call template="pages/GreenOnion/Routes.tsx" 
+        name="pages/GreenOnion/Routes"
+        }}   

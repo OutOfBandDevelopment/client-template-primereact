@@ -1,0 +1,151 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { Suspense } from 'react';
+import { Routes, Route } from 'react-router-dom';
+import { PermissionGuard } from '@/components/auth/PermissionGuard';
+import type { UserRole } from '@/types/roles';
+
+// List Pages
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+const {{str-element entityName "." "@last"}}List = React.lazy(() => import('@/pages/{{@namespace}}/{{str-element entityName "." "@last"}}/List'));
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+
+// Edit Pages
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+const {{str-element entityName "." "@last"}}Edit = React.lazy(() => import('@/pages/{{@namespace}}/{{str-element entityName "." "@last"}}/Edit'));
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+
+// Demo Pages
+const DemoComboBoxes = React.lazy(() => import('@/pages/{{@namespace}}/Demo/ComboBoxes'));
+const DemoMultiSelects = React.lazy(() => import('@/pages/{{@namespace}}/Demo/MultiSelects'));
+const DemoDataGrids = React.lazy(() => import('@/pages/{{@namespace}}/Demo/DataGrids'));
+const DemoPropertyEditors = React.lazy(() => import('@/pages/{{@namespace}}/Demo/PropertyEditors'));
+
+/**
+ * GreenOnion Routes
+ * All routes for GreenOnion entities
+ */
+export function GreenOnionRoutes() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Routes>
+        {/* Demo Routes - /v2/demo/* */}
+        <Route path="demo/comboboxes" element={<DemoComboBoxes />} />
+        <Route path="demo/multiselects" element={<DemoMultiSelects />} />
+        <Route path="demo/datagrids" element={<DemoDataGrids />} />
+        <Route path="demo/propertyeditors" element={<DemoPropertyEditors />} />
+
+      {/* Entity Routes - /v2/{Entity}/* */}
+      {/* Routes are wrapped with PermissionGuard based on schema x-permissions */}
+      {/* Each entity has List, Edit, and View routes - View uses same Edit component with mode detection */}
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+        {{~#if entityDefinition.x-permissions.role}}
+        {/* {{str-element entityName "." "@last"}} - Requires: {{#each entityDefinition.x-permissions.role}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} */}
+        <Route path="{{str-element entityName "." "@last"}}/List" element={<PermissionGuard roles={[{{#each entityDefinition.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}] as UserRole[]}><{{str-element entityName "." "@last"}}List /></PermissionGuard>} />
+        <Route path="{{str-element entityName "." "@last"}}/Edit/:id" element={<PermissionGuard roles={[{{#each entityDefinition.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}] as UserRole[]}><{{str-element entityName "." "@last"}}Edit /></PermissionGuard>} />
+        <Route path="{{str-element entityName "." "@last"}}/View/:id" element={<PermissionGuard roles={[{{#each entityDefinition.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}] as UserRole[]}><{{str-element entityName "." "@last"}}Edit /></PermissionGuard>} />
+        {{~else~}}
+        <Route path="{{str-element entityName "." "@last"}}/List" element={<{{str-element entityName "." "@last"}}List />} />
+        <Route path="{{str-element entityName "." "@last"}}/Edit/:id" element={<{{str-element entityName "." "@last"}}Edit />} />
+        <Route path="{{str-element entityName "." "@last"}}/View/:id" element={<{{str-element entityName "." "@last"}}Edit />} />
+        {{~/if~}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+      </Routes>
+    </Suspense>
+  );
+}
+
+/**
+ * Route definition item with optional role-based permissions
+ */
+export interface GreenOnionRouteItem {
+  label: string;
+  path: string;
+  icon: string;
+  requiredRoles?: UserRole[];
+}
+
+export interface GreenOnionRouteSection {
+  label: string;
+  icon: string;
+  requiredRoles?: UserRole[];
+  items: GreenOnionRouteItem[];
+}
+
+/**
+ * Route definitions for navigation/menus
+ * All routes use /v2/ prefix to coexist with legacy routes
+ * Includes requiredRoles from schema x-permissions for menu filtering
+ */
+export const greenOnionRouteDefinitions: GreenOnionRouteSection[] = [
+  {
+    label: 'Demos (v2)',
+    icon: 'pi pi-th-large',
+    requiredRoles: ['Super Admin'],
+    items: [
+      { label: 'ComboBoxes', path: '/v2/demo/comboboxes', icon: 'pi pi-list' },
+      { label: 'MultiSelects', path: '/v2/demo/multiselects', icon: 'pi pi-check-square' },
+      { label: 'DataGrids', path: '/v2/demo/datagrids', icon: 'pi pi-table' },
+      { label: 'PropertyEditors', path: '/v2/demo/propertyeditors', icon: 'pi pi-pencil' },
+    ],
+  },
+  {
+    label: 'Entities (v2)',
+    icon: 'pi pi-database',
+    requiredRoles: ['Super Admin'],
+    items: [
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+      {
+        label: '{{import template="_common/get-entity-label" def=entityDefinition name=entityName body=body}}',
+        path: '/v2/{{str-element entityName "." "@last"}}/List',
+        icon: 'pi pi-list',
+        {{~#if entityDefinition.x-permissions.role}}
+        requiredRoles: [{{#each entityDefinition.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}] as UserRole[],
+        {{~/if~}}
+      },
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+    ],
+  },
+];
+
+export default GreenOnionRoutes;

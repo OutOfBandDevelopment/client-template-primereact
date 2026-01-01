@@ -1,0 +1,26 @@
+{{~#if schema.type~}}
+    {{~#if-any schema.type "integer"~}}
+        number
+    {{~else~}}
+        {{~#if-any schema.type "array"~}}     
+            {{~#if-any schema.items.type "integer"~}}
+                number[]
+            {{~else~}}   
+                {{~#with (lookup schema.items "$ref") ~}}
+                    I{{~str-element (str-element this "/" "@last") "." "@last"~}}[]
+                {{~else~}}
+                    {{~schema.items.type~}}[]
+                {{~/with~}}
+            {{/if-any}}
+        {{~else~}}
+        {{~schema.type~}}
+        {{/if-any}}
+    {{/if-any}}
+{{~else~}}
+    {{~#with (lookup schema "$ref")~}}
+        I{{~str-element (str-element this "/" "@last") "." "@last"~}}
+    {{~else~}}
+    any
+    {{~/with~}}
+{{~/if}}
+ | undefined

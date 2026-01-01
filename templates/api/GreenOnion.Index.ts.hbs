@@ -1,0 +1,34 @@
+{{ import "_common/file_header.ts" }}
+{{~call template="api/GreenOnion/Clients/Index.ts" name="api/GreenOnion/Clients/index" node=@this~}}
+{{~call template="api/GreenOnion/Models/Index.ts" name="api/GreenOnion/Models/index" node=@this~}}
+{{~call template="api/GreenOnion/Schema/Index.ts" name="api/GreenOnion/Schema/index" node=@this~}}
+// Clients
+{{#group-by paths "$.*.tags[0]"}}
+export type { default as I{{key}}Client } from "./I{{key}}Client";  {{call template="api/GreenOnion/Clients/I{Entity}Client.ts" name=(concat "api/GreenOnion/" "I" key "Client") node=@this}}
+{{/group-by}}
+
+{{!-- export type {
+{{#group-by paths "$.*.tags[0]"}}
+    {{key}}Client, 
+{{/group-by}}
+} from "./Clients";  --}}
+
+// Models
+export type {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (concat (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "I" (str-element @key "." "@last"))~}}
+{{~/builder}}
+    {{!-- {{@built.class}}, --}}{{@built.schema}},
+{{/each}}
+} from "./Models";
+
+export {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+{{~/builder}}
+    {{@built.schema}},
+{{/each}} 
+} from "./Schema";

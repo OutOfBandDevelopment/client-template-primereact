@@ -1,0 +1,111 @@
+{{ import "_common/file_header.ts" }}
+import { z } from "zod";
+{{#group-by definition.properties "$.*.items['$ref']" "$.*['$ref']" "$['$ref']"}}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+import Z{{model}} from "./Z{{model}}";
+{{/with}}
+{{/if}}
+{{/group-by}}
+
+{{#if definition.enum}}
+const {{schema}} = z.enum([
+{{#each definition.enum as |name index|}}
+    "{{name}}",
+{{/each}}
+]);
+{{else}}
+const {{schema}} = z.object({
+{{#each definition.properties as |property name|}}
+    {{name}}: {{#if (lookup property "$ref")~}}
+            {{~concat "Z" (str-element (str-element (lookup property "$ref") "/" "@last") "." "@last")~}}
+        {{~else~}}
+            z
+            {{~#if-eq property.type "array"~}}
+                .array(
+                    {{~#if (lookup property.items "$ref")~}}
+                        {{~concat "Z" (str-element (str-element (lookup property.items "$ref") "/" "@last") "." "@last")~}}
+                    {{~else~}}
+                        {{~#if property.items.type~}}
+                            {{~#if-eq property.items.type "integer"~}}
+                                z.number().int()
+                            {{~else~}}
+                                z.{{~property.items.type~}}()
+                            {{~/if-eq~}}
+                        {{~else~}}
+                            z.any()
+                        {{~/if~}}
+                    {{~/if~}}
+                )
+            {{~else~}}
+                {{~#if-eq property.type "integer"~}}
+                    .number().int()
+                {{~else~}}
+                    {{~#if property.type~}}
+                    .{{property.type}}()
+                    {{~else~}}
+                    .any()
+                    {{~/if~}}
+                {{~/if-eq~}}
+            {{~/if-eq~}}
+            {{~#if property.minLength~}}.min({{property.minLength}}){{~/if~}}
+            {{~#if property.maxLength~}}.max({{property.maxLength}}){{~/if~}}
+            {{~#if property.pattern~}}.regex(/{{property.pattern}}/){{~/if~}}
+            {{~#if property.minimum~}}.min({{property.minimum}}){{~/if~}}
+            {{~#if property.maximum~}}.max({{property.maximum}}){{~/if~}}
+            .meta({
+                {{~#each property as |value name|~}}
+                    {{~#if-starts name "x-"~}}
+                        {{~#if-eq value true~}}
+                    '{{name}}': true,
+                        {{~else~}}
+                            {{~#if-eq value false~}}
+                    '{{name}}': false,
+                            {{~else~}}
+                    '{{name}}': '{{value}}',
+                            {{~/if-eq~}}
+                        {{~/if-eq~}}
+                    {{~/if-starts~}}
+                {{~/each~}}
+                {{~#if property.readOnly~}}'readOnly': true,{{~/if~}}
+                {{~#if property.format~}}'format': '{{property.format}}',{{~/if~}}
+                {{~#if property.minLength~}}'minLength': {{property.minLength}},{{~/if~}}
+                {{~#if property.maxLength~}}'maxLength': {{property.maxLength}},{{~/if~}}
+                {{~#if property.minimum~}}'minimum': {{property.minimum}},{{~/if~}}
+                {{~#if property.maximum~}}'maximum': {{property.maximum}},{{~/if~}}
+                {{~#if property.pattern~}}'pattern': '{{property.pattern}}',{{~/if~}}
+                {{~#if property.nullable~}}'nullable': true,{{~/if~}}
+            })
+        {{~/if~}}
+    {{~#if property.nullable~}}.nullish(){{~else~}}{{~#unless property.minLength~}}.nullish(){{~/unless~}}{{~/if~}},
+{{/each}}
+}).meta({
+    'full-name':'{{full-class}}',
+{{#if definition.x-label}}
+    'x-label': '{{definition.x-label}}',
+{{/if}}
+{{#if definition.x-save-model}}
+    'x-save-model': '{{definition.x-save-model}}',
+{{/if}}
+{{#if definition.x-query-model}}
+    'x-query-model': '{{definition.x-query-model}}',
+{{/if}}
+{{#if definition.x-read-only}}
+    'x-read-only': true,
+{{/if}}
+{{#if definition.x-not-selectable}}
+    'x-not-selectable': true,
+{{/if}}
+{{#if definition.x-not-creatable}}
+    'x-not-creatable': true,
+{{/if}}
+{{#if definition.x-bulk-actions}}
+    'x-bulk-actions': [{{#each definition.x-bulk-actions as |action|}}'{{action}}',{{/each}}],
+{{/if}}
+{{#if definition.required}}
+    'required': [{{#each definition.required as |field|}}'{{field}}',{{/each}}],
+{{/if}}
+});
+{{/if}}
+
+export default {{schema}};

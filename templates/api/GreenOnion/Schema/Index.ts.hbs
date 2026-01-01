@@ -1,0 +1,13 @@
+{{ import "_common/file_header.ts" }}
+{{call template="api/GreenOnion/Schema/Registry.ts" name=(concat "api/GreenOnion/Schema/Registry/index") node=this}}
+// Models
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder~}}
+export { default as {{@built.schema}} } from "./{{@built.schema}}"; {{call template="api/GreenOnion/Schema/{Entity}Schema.ts" name=(concat "api/GreenOnion/Schema/" @built.schema) node=@built}}
+{{/each}} 

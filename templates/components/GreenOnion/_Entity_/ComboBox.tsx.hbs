@@ -1,0 +1,304 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useCallback, useMemo } from 'react';
+import { Dropdown } from 'primereact/dropdown';
+import type { DropdownProps } from 'primereact/dropdown';
+import { Controller } from 'react-hook-form';
+import type { Control, FieldValues, RegisterOptions, UseFormSetValue } from 'react-hook-form';
+import { useCachedApiCall } from '@/hooks/useCachedApiCall';
+import { CacheKeys } from '@/utils/masterDataCache';
+import { getSchema } from '@/api/{{@namespace}}/Schema/Registry';
+import type { z } from 'zod';
+import { QueryCacheKeys } from '../';
+import type { IComboboxEntityProps, IEntityOption } from '../IComboboxEntityProps';
+
+import {{@clientName}} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+import type {
+  {{@entityInterface}},
+  {{@entityInterface}}SearchQuery,
+  {{@entityInterface}}OrderBy,
+  {{@entityInterface}}Filter,
+  IFilterParameter,
+} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+{{#if @def.x-combobox-variants}}
+
+// Available variants for this combobox
+export type {{@entityNameSimple}}ComboBoxVariant = {{#each @def.x-combobox-variants}}'{{@key}}'{{#unless @last}} | {{/unless}}{{/each}};
+
+// Variant filter configurations
+const variantFilters: Record<{{@entityNameSimple}}ComboBoxVariant, Record<string, any> | null> = {
+{{#each @def.x-combobox-variants}}
+  '{{@key}}': {{#if this.filter}}{ {{#each this.filter}}'{{@key}}': { eq: {{#if-eq this true}}true{{else}}{{#if-eq this false}}false{{else}}{{this}}{{/if-eq}}{{/if-eq}} }{{#unless @last}}, {{/unless}}{{/each}} }{{else}}null{{/if}},
+{{/each}}
+};
+
+// Variant labels for display
+export const variantLabels: Record<{{@entityNameSimple}}ComboBoxVariant, string> = {
+{{#each @def.x-combobox-variants}}
+  '{{@key}}': '{{this.label}}',
+{{/each}}
+};
+{{/if}}
+
+/*
+{{@entityNameSimple}}ComboBox
+
+## Action
+{{import template="_common/action-definition" 
+         request=request 
+         uri=uri 
+         }}
+## Entity
+{{import template="_common/entity-definition"
+         name=@entityNameFull
+         def=entityDefinition 
+         }}
+## Values
+httpMethod: {{@httpMethod}}
+entityName-full: {{@entityNameFull}} 
+entityName: {{@entityNameSimple}}    
+entityInterface: {{@entityInterface}}           
+query-set: {{requestBody.x-query-set}}
+query-action: {{requestBody.x-query-action}}
+uri: {{@uri}}
+typeName: {{@typeName}}
+idProperty: {{@idProperty}}
+valueProperty: {{@valueProperty}}
+cacheKey: {{@cacheKey}}
+  
+{{!--  
+    body: {{@body}}
+    request: {{@request}}
+    entityDefinition: {{entityDefinition}}
+--}}         
+*/
+
+{{#if @def.x-combobox-variants}}
+interface {{@entityNameSimple}}ComboBoxPropsWithVariant<TFormValues extends FieldValues = FieldValues>
+  extends IComboboxEntityProps<{{@entityInterface}}, TFormValues> {
+  /** Filter variant to apply */
+  variant?: {{@entityNameSimple}}ComboBoxVariant;
+}
+{{/if}}
+
+function {{@entityNameSimple}}ComboBox<TFormValues extends FieldValues = FieldValues>({
+  value,
+  onChange,
+  onEntityChange,
+  onTextChange,
+  placeholder = "Select {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}",
+  className = "form-select",
+  disabled = false,
+  control,
+  setValue: setValueProp,
+  name = "{{@idProperty}}",
+  entityName,
+  textName,
+  required = false,
+  rules,
+  includeEmpty = true,
+  emptyLabel = "Select {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}",
+  onLoadError,
+  parentEntityId,
+  parentEntityFieldName,
+  requireParent = false,
+  parentRequiredMessage = "Please select a parent first",
+{{#if @def.x-combobox-variants}}
+  variant = 'all',
+{{/if}}
+  ...dropdownProps
+}: {{#if @def.x-combobox-variants}}{{@entityNameSimple}}ComboBoxPropsWithVariant<TFormValues>{{else}}IComboboxEntityProps<{{@entityInterface}}, TFormValues>{{/if}}) {
+  // Helper to check if parent is valid
+  const isParentValid = !requireParent || (parentEntityId !== undefined && parentEntityId > 0);
+
+{{#if @def.x-combobox-variants}}
+  // Get the variant filter configuration
+  const variantFilter = useMemo(() => {
+    return variantFilters[variant] || null;
+  }, [variant]);
+{{/if}}
+
+  // Create cached API call function with proper filtering and sorting
+  const fetchItems = useCallback(async (): Promise<IEntityOption<{{@entityInterface}}>[]> => {
+    const client = new {{@clientName}}();
+
+    // Build filter with optional parent and variant filtering
+    const filter: {{@entityInterface}}Filter = {
+      isActive: { eq: true } as IFilterParameter,
+      ...(parentEntityId && parentEntityId > 0 && parentEntityFieldName
+        ? { [parentEntityFieldName]: { eq: parentEntityId } as IFilterParameter }
+        : {}),
+{{#if @def.x-combobox-variants}}
+      ...(variantFilter || {})
+{{/if}}
+    } as {{@entityInterface}}Filter;
+
+    const searchQuery: {{@entityInterface}}SearchQuery = {
+      currentPage: 0,
+      pageSize: 1000,
+      orderBy: {
+        {{~#if @valueProperty}}{{@valueProperty}}{{else}}{{@idProperty}}{{/if~}}: "asc"
+      } as {{@entityInterface}}OrderBy,
+      filter
+    };
+    
+    const res = await client.Query({
+      body: searchQuery
+    });
+
+    if (res && res.rows) {
+      const options: IEntityOption<{{@entityInterface}}>[] = res.rows
+        .filter((model: {{@entityInterface}}) => {
+          const id = model.{{@idProperty}};
+          return id !== null && id !== undefined && id !== 0;
+        })
+        .map((model: {{@entityInterface}}) => ({
+          value: model.{{@idProperty}} ?? 0,
+          label: model.{{~#if @valueProperty}}{{@valueProperty}}{{else}}{{@idProperty}}{{/if~}} ?? 'N/A',
+          entity: model
+        }));
+
+      // Add empty option if requested
+      if (includeEmpty) {
+        options.unshift({ value: 0, label: emptyLabel, entity: undefined });
+      }
+
+      return options;
+    }
+    
+    return includeEmpty ? [{ value: 0, label: emptyLabel, entity: undefined }] : [];
+  }, [includeEmpty, emptyLabel, parentEntityId, parentEntityFieldName{{#if @def.x-combobox-variants}}, variantFilter{{/if}}]);
+
+  // Use cached API call hook with 30-minute TTL
+  // Cache key includes parent ID and variant for proper cache isolation
+  const cacheKey = useMemo(() => {
+    let key = QueryCacheKeys.{{@cacheKey}}();
+    if (parentEntityId && parentEntityId > 0) {
+      key += `_parent_${parentEntityId}`;
+    }
+{{#if @def.x-combobox-variants}}
+    if (variant && variant !== 'all') {
+      key += `_variant_${variant}`;
+    }
+{{/if}}
+    return key;
+  }, [parentEntityId{{#if @def.x-combobox-variants}}, variant{{/if}}]);
+
+  const {
+    data: items = [],
+    loading,
+    error
+  } = useCachedApiCall(
+    cacheKey,
+    fetchItems,
+    {
+      ttl: 30 * 60 * 1000, // Cache for 30 minutes
+      onError: (error) => {
+        console.error('Error loading:', error);
+        if (onLoadError) {
+          onLoadError(error instanceof Error ? error.message : 'Failed to load');
+        }
+      }
+    }
+  );
+
+  // If control is provided, use Controller for React Hook Form integration
+  if (control && name) {
+    return (
+      <Controller
+        name={name as any}
+        control={control}
+        rules={ {
+          required: required ? "{{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} is required" : false,
+          ...rules
+        } }
+        render={({ field }) => (
+          <Dropdown
+            {...dropdownProps}
+            value={field.value ?? (includeEmpty ? 0 : undefined)}
+            options={items}
+            onChange={(e) => {
+              const selectedValue = e.value;
+              const selectedOption = items.find(opt => opt.value === selectedValue);
+              const selectedEntity = selectedOption?.entity;
+              
+              field.onChange(selectedValue);
+              
+              // Force form update for entity and text fields
+              setTimeout(() => {
+                if (setValueProp && typeof setValueProp === 'function') {
+                  if (entityName && selectedEntity) {
+                    setValueProp(entityName as any, selectedEntity, { shouldTouch: true, shouldDirty: true });
+                  } else if (entityName && selectedValue === 0) {
+                    setValueProp(entityName as any, null, { shouldTouch: true, shouldDirty: true });
+                  }
+                  {{#if @valueProperty}}
+                  if (textName && selectedEntity?.{{@valueProperty}}) {
+                    setValueProp(textName as any, selectedEntity.{{@valueProperty}}, { shouldTouch: true, shouldDirty: true });
+                  } else if (textName && selectedValue === 0) {
+                    setValueProp(textName as any, '', { shouldTouch: true, shouldDirty: true });
+                  }
+                  {{/if}}
+                }
+              }, 0);
+              
+              // Call external handlers
+              if (onChange) onChange(selectedValue);
+              if (onEntityChange) onEntityChange(selectedEntity || null);{{#if @valueProperty}}
+              if (onTextChange) onTextChange(selectedEntity?.{{@valueProperty}} || '');{{/if}}
+            }}
+            optionLabel="label"
+            optionValue="value"
+            placeholder={loading ? 'Loading {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}...' : (!isParentValid ? parentRequiredMessage : placeholder)}
+            disabled={disabled || loading || !isParentValid}
+            loading={loading}
+            filter={items && items.length > 10}
+            filterPlaceholder="Search {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}..."
+            emptyMessage={!isParentValid ? parentRequiredMessage : "No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} found"}
+            emptyFilterMessage="No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} match the search"
+            showClear={ !required && !includeEmpty }
+          />
+        )}
+      />
+    );
+  }
+
+  // Otherwise, render standalone dropdown
+  return (
+    <Dropdown
+      {...dropdownProps}
+      value={value ?? (includeEmpty ? 0 : undefined)}
+      options={items}
+      onChange={(e) => {
+        const selectedValue = e.value;
+        const selectedOption = items.find(opt => opt.value === selectedValue);
+        const selectedEntity = selectedOption?.entity;
+
+        if (onChange) onChange(selectedValue);
+        if (onEntityChange) onEntityChange(selectedEntity || null);{{#if @valueProperty}}
+        if (onTextChange) onTextChange(selectedEntity?.{{@valueProperty}} || '');{{/if}}
+      }}
+      optionLabel="label"
+      optionValue="value"
+      placeholder={loading ? 'Loading {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}...' : (!isParentValid ? parentRequiredMessage : placeholder)}
+      disabled={disabled || loading || !isParentValid}
+      loading={loading}
+      filter={items && items.length > 10}
+      filterPlaceholder="Search {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}..."
+      emptyMessage={!isParentValid ? parentRequiredMessage : "No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} found"}
+      emptyFilterMessage="No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} match the search"
+      showClear={!required && !includeEmpty}
+    />
+  );
+}
+
+{{@entityNameSimple}}ComboBox.zodSchema = async (): Promise<z.ZodSchema | null> => {
+  return await getSchema('{{@entityInterface}}');
+};
+
+export default {{@entityNameSimple}}ComboBox;
+{{#if @def.x-combobox-variants}}
+export type { {{@entityNameSimple}}ComboBoxPropsWithVariant as {{@entityNameSimple}}ComboBoxProps };
+{{else}}
+export type { IComboboxEntityProps as {{@entityNameSimple}}ComboBoxProps };
+{{/if}}

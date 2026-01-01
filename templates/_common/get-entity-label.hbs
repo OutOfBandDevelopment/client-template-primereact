@@ -1,0 +1,23 @@
+{{!--
+Get entity label from x-label metadata or fallback to entity name
+Usage: {{import template="_common/get-entity-label" def=entityDefinition name=entityName}}
+Parameters:
+  - def: Entity definition object (from components.schemas)
+  - name: Entity name (used as fallback)
+  - body: Request body (alternative source for tag name)
+--}}
+{{~#if @def.x-label~}}
+    {{~@def.x-label~}}
+{{~else~}}
+    {{~#if @body~}}
+        {{~#each @body.tags as |tag index|~}}
+            {{~#if-any index "0"~}}
+                {{~tag~}}
+            {{~/if-any~}}
+        {{~/each~}}
+    {{~else if @name~}}
+        {{~str-element @name "." "@last"~}}
+    {{~else~}}
+        Entity
+    {{~/if~}}
+{{~/if~}}

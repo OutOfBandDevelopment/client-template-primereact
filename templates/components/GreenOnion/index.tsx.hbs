@@ -1,0 +1,109 @@
+{{ import "_common/file_header.ts" }}
+
+export type { IComboboxEntityProps } from "./IComboboxEntityProps";
+export type { IMultiSelectEntityProps } from "./IMultiSelectEntityProps";
+export type { IDataGridEntityProps } from "./IDataGridEntityProps";
+export type { IPropertyEditorProps } from "./IPropertyEditorProps";
+
+// Component registry for navigation target mapping
+export {
+  getComboboxComponent,
+  getMultiSelectComponent,
+  hasComboboxComponent,
+  hasMultiSelectComponent,
+  extractModelName,
+  getAvailableModels,
+  isValidModelName,
+  getModelFromNavigationTarget,
+  NAVIGATION_TARGET_MAP,
+} from "./componentRegistry";
+export type { ComboboxComponentKey, MultiselectComponentKey } from "./componentRegistry";
+
+{{~call template="components/GreenOnion/IComboboxEntityProps.ts" name="components/GreenOnion/IComboboxEntityProps"}}
+{{~call template="components/GreenOnion/IMultiSelectEntityProps.ts" name="components/GreenOnion/IMultiSelectEntityProps"}}
+{{~call template="components/GreenOnion/IDataGridEntityProps.ts" name="components/GreenOnion/IDataGridEntityProps"}}
+{{~call template="components/GreenOnion/IPropertyEditorProps.ts" name="components/GreenOnion/IPropertyEditorProps"}}
+{{~call template="components/GreenOnion/componentRegistry.ts" name="components/GreenOnion/componentRegistry"}}
+
+/**
+ * Cache keys for GreenOnion API queries
+ * Namespaced with 'GreenOnion:' prefix to prevent collisions
+ */
+export const QueryCacheKeys: Record<string, () => string> = {};
+
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+export type { I{{str-element entityName "." "@last"}} } from "@/api/{{@namespace}}/Models";
+export { Z{{str-element entityName "." "@last"}} } from "@/api/{{@namespace}}/Schema";
+{{#unless entityDefinition.x-not-selectable}}
+export {
+  {{str-element entityName "." "@last"}}ComboBox,
+  {{str-element entityName "." "@last"}}MultiSelect,
+} from "{{~ concat "./" (str-element entityName "." "@last") ~}}";
+{{/unless}}
+export {
+  {{str-element entityName "." "@last"}}DataGrid,
+  {{str-element entityName "." "@last"}}PropertyEditor,
+} from "{{~ concat "./" (str-element entityName "." "@last") ~}}";
+QueryCacheKeys.{{str-element entityName "." "@last"}}Query = () => 'GreenOnion:{{str-element entityName "." "@last"}}:Query';
+{{!-- 
+    httpMethod: httpMethod
+    request: {{request}}
+    entityName-full: {{entityName}} 
+    entityName: {{str-element entityName "." "@last"}}            
+    query-set: {{body.x-query-set}}
+    query-action: {{body.x-query-action}}
+    entityDefinition: {{entityDefinition}}
+{{~import template="_common/action-definition" request=request uri=uri ~}}
+--}}                
+{{~call template="components/GreenOnion/_Entity_/index.tsx"
+        name=(concat "components/GreenOnion/" (str-element entityName "." "@last") "/index")
+        def=entityDefinition
+        entityNameFull=entityName
+        entityNameSimple=(str-element entityName "." "@last")
+        entityInterface=(concat "I" (str-element entityName "." "@last"))
+        request=request
+        uri=uri
+        body=body
+        clientName=(import template="_common/get-entity-name" body=body)
+        typeName=(import template="_common/get-entity-name" body=body)
+        idProperty=(import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key")
+        valueProperty=(import template="_common/get-entity-property" def=entityDefinition targetProperty="x-display-value")
+        cacheKey=(concat (str-element entityName "." "@last") "Query")
+        ~}} 
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+
+{{!--
+/*
+-- Actions --
+{{#each paths as |request uri|}}
+{{~import template="_common/action-definition" request=request uri=uri~}}
+---
+{{/each}}
+
+-- Entities --
+{{#each components.schemas as |definition name|}}
+{{~import template="_common/entity-definition" def=definition name=name~}}
+---
+{{/each}}
+*/
+
+{{#each components.schemas as |definition name|}}
+{{~import template="_common/entity-definition" def=definition name=name~}} 
+/* 
+Name: {{name}}
+Definition: {{definition}}
+*/
+//TODO: this should only list if the entity is queryable
+{{~call template="components/GreenOnion/_Entity_/index.tsx" name=(concat "components/index/" (str-element @name "." "@last") "/index") def=definition entityName=name}}
+{{/each}}
+--}}

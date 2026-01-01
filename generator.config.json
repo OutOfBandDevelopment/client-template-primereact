@@ -1,0 +1,79 @@
+{
+  "$schema": "./generator.schema.json",
+  "generator": {
+    "namespace": "GreenOnion",
+    "displayName": "Green Onion",
+    "description": "School Food Service Management System",
+
+    "paths": {
+      "templates": "./templates",
+      "output": "../src",
+      "swagger": "./swagger.json"
+    },
+
+    "api": {
+      "baseUrl": "/api",
+      "clientSuffix": "Client",
+      "modelPrefix": "I",
+      "schemaPrefix": "Z"
+    },
+
+    "entities": {
+      "include": ["Query*Model"],
+      "exclude": ["*SearchQuery", "*Filter", "*OrderBy"]
+    },
+
+    "generation": {
+      "components": {
+        "combobox": true,
+        "multiselect": true,
+        "datagrid": true,
+        "propertyEditor": true,
+        "entityForm": true,
+        "formSchema": true
+      },
+      "pages": {
+        "list": true,
+        "edit": true,
+        "routes": true
+      },
+      "api": {
+        "clients": true,
+        "models": true,
+        "schemas": true,
+        "registry": true
+      }
+    },
+
+    "routing": {
+      "prefix": "/v2",
+      "useReactRouter": true
+    },
+
+    "features": {
+      "bulkActions": true,
+      "export": true,
+      "impersonation": true,
+      "devTools": true
+    }
+  },
+
+  "swagger": {
+    "requiredExtensions": [
+      "x-navigation-key",
+      "x-navigation-target",
+      "x-navigation-relation",
+      "x-label"
+    ],
+    "optionalExtensions": [
+      "x-display-value",
+      "x-field-set",
+      "x-hidden-column",
+      "x-hidden-field",
+      "x-custom-renderer",
+      "x-combobox-variants",
+      "x-bulk-actions",
+      "x-permissions"
+    ]
+  }
+}

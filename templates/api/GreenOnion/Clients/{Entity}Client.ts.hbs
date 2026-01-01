@@ -1,0 +1,109 @@
+{{ import "_common/file_header.ts" }}
+// Interface
+import { ClientBase, ApiException } from "../../_ClientBase";
+export { ApiException };
+import type I{{key}}Client from "../I{{key}}Client";
+
+{{!-- /*
+key: {{this.key}}
+{{#each this.items as |schema|}}
+    {{~import template="_common/action-definition" request=schema.value uri=schema.key ~}}
+{{schema.value}}    
+---    
+{{/each}}
+*/ --}}
+
+// Models 
+import type {
+{{#group-by items 
+    "$.value.*.requestBody.content['application/json'].schema['$ref']" 
+    "$.value.*.requestBody.content['application/json'].schema.items['$ref']" 
+    "$.value.*.responses['200'].content['application/json'].schema['$ref']" 
+    "$.value.*.responses['200'].content['application/json'].schema.items['$ref']" 
+    "$.value.*.parameters[*].schema['$ref']"
+    "$.value.*.parameters[*].schema.items['$ref']"
+    }}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+    I{{model}},
+{{/with}}
+{{/if}}
+{{/group-by}}
+} from "../Models";
+
+import {
+{{#group-by items 
+    "$.value.*.requestBody.content['application/json'].schema['$ref']" 
+    "$.value.*.requestBody.content['application/json'].schema.items['$ref']" 
+    "$.value.*.responses['200'].content['application/json'].schema['$ref']" 
+    "$.value.*.responses['200'].content['application/json'].schema.items['$ref']" 
+    "$.value.*.parameters[*].schema['$ref']"
+    "$.value.*.parameters[*].schema.items['$ref']"
+    }}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+    Z{{model}},
+{{/with}}
+{{/if}}
+{{/group-by}}
+} from "../Schema";
+
+// Exports
+export type { 
+    I{{key}}Client,
+
+{{#group-by items "$.value.*.requestBody.content['application/json'].schema['$ref']" "$.value.*.responses['200'].content['application/json'].schema['$ref']" "$.value.*.parameters[*].schema['$ref']"}}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+    I{{model}},
+{{/with}}
+{{/if}}
+{{/group-by}}
+};
+
+export default class {{key}}Client extends ClientBase implements I{{key}}Client  {
+    protected http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> };
+    private baseUrl: string;
+    protected jsonParseReviver: ((key: string, value: unknown) => unknown) | undefined = undefined;
+
+    constructor(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) {
+        super();       
+        // Use global fetch if available, fallback to window, then to a fetch polyfill
+        this.http = http ? http : (
+            typeof globalThis !== 'undefined' && globalThis.fetch ? globalThis :
+            typeof window !== 'undefined' && window.fetch ? window :
+            typeof global !== 'undefined' && (global as any).fetch ? global as any :
+            { fetch: fetch } // Use global fetch function directly
+        );
+        this.baseUrl = this.getBaseUrl("", baseUrl);
+    }
+{{#each items as |item|}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.post.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.post as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    async {{ import "_helpers/ClientOperationMethodSignature"}}
+    {{~import "_helpers/ClientOperationMethodBody" httpMethod="POST"~}}
+    {{/with}}
+    {{/with}}
+    {{/with}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.get.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.get as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    async {{ import "_helpers/ClientOperationMethodSignature"}}
+    {{~import "_helpers/ClientOperationMethodBody" httpMethod="GET"}}
+    {{/with}}
+    {{/with}}
+    {{/with}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.delete.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.delete as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    async {{ import "_helpers/ClientOperationMethodSignature"}}
+    {{~import "_helpers/ClientOperationMethodBody" httpMethod="DELETE"}}
+    {{/with}}
+    {{/with}}
+    {{/with}}
+{{/each}}
+}

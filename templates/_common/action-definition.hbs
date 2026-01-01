@@ -1,0 +1,32 @@
+uri: {{@uri}}
+  {{#each @request as |request httpMethod| }}
+    httpMethod: {{httpMethod}}
+    client: {{import template="_common/get-entity-name" body=@body}}Client
+    tags: 
+    {{#each @body.tags as |tag| }}
+      - {{tag}}
+    {{/each}}  
+    summary: {{body.summary}}
+    {{!-- description: {{body.description}} --}}
+    operationId: {{body.operationId}}
+    {{#if @body.parameters}}
+    parameters:
+      {{#each @body.parameters as |parameter| }}
+      - {{parameter.name}}: {{import template="_common/schema-template" schema=parameter.schema}}
+      {{/each}}  
+    {{/if}}
+    {{#if @body.requestBody}}
+    requestBody: {{import template="_common/schema-template" schema=@body.requestBody.content.[application/json].schema}}
+    {{/if}}
+    responseBody: {{import template="_common/schema-template" schema=@body.responses.200.content.[application/json].schema}}
+    permissions: 
+      isAnonymous: {{body.x-permissions.anonymous}}
+      {{#if @body.x-permissions.roles}}
+      roles:
+      {{#each @body.x-permissions.roles as |role| }}
+        - {{role}}
+      {{/each}}  
+      {{/if}}
+    query-set: {{body.x-query-set}}
+    query-action: {{body.x-query-action}}
+{{/each}}

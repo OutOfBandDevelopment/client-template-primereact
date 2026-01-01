@@ -1,0 +1,31 @@
+# Client Generator
+
+## Notes
+
+```ts
+{{ import "_common/file_header.ts" }}
+```
+
+{{~call template="api/GreenOnion.Index.ts" name="api/GreenOnion/index" node=@this}}
+{{~call template="components/GreenOnion/index.tsx" name="components/GreenOnion/index"}}
+{{~call template="pages/GreenOnion/readme.md" name="pages/GreenOnion/readme"}}
+
+## Required Components 
+
+```shell
+npm install uuid zod
+npm install primereact primeicons
+```
+
+## Prime React
+```tsx
+import { PrimeReactProvider } from 'primereact/api';
+
+export default function MyApp({ Component, pageProps }) {
+    return (
+        <PrimeReactProvider>
+            <Component {...pageProps} />
+        </PrimeReactProvider>
+    );
+}
+```

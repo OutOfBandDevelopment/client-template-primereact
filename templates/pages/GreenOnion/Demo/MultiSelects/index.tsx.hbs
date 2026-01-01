@@ -1,0 +1,207 @@
+{{ import "_common/file_header.ts" }}
+
+import React from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { Panel } from 'primereact/panel';
+import { Button } from 'primereact/button';
+
+import {
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+                    {{~ #unless entityDefinition.x-not-selectable}}
+  {{str-element entityName "." "@last"}}MultiSelect,
+                    {{~/unless}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import type {
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+                    {{~ #unless entityDefinition.x-not-selectable}}
+  {{concat "I" (str-element entityName "." "@last")}},
+                    {{~/unless}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import './index.scss';
+
+/**
+ * Form data interface for all multi-selects with entity binding support
+ */
+interface DemoFormData {
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+                    {{~ #unless entityDefinition.x-not-selectable}}
+  {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s: number[];
+  {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Entities: {{concat "I" (str-element entityName "." "@last")}}[];
+  {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Texts: string[];
+                    {{~/unless}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+}
+
+/**
+ * Demo UI page to showcase all multi-select components
+ * Displays each multi-select with form integration and real-time value display
+ */
+export default function DemoMultiSelects() {
+  const { handleSubmit, watch, setValue, reset, control, formState: { errors } } = useForm<DemoFormData>({
+    defaultValues: {
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+                    {{~ #unless entityDefinition.x-not-selectable}}
+      {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s: [],
+      {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Entities: [],
+      {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Texts: [],
+                    {{~/unless}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+    }
+  });
+
+  const watchedValues = watch();
+
+  const onSubmit = (data: DemoFormData) => {
+    console.log('Form submitted with data:', data);
+    alert('Form submitted! Check console for data.');
+  };
+
+  return (
+    <div className="demo-ui-page p-4">
+      <h1 className="text-2xl font-bold mb-4">MultiSelect Components Demo</h1>
+      <p className="text-gray-600 mb-6">Showcase of all standardized multi-select components with form integration</p>
+
+      <form onSubmit={handleSubmit(onSubmit)}>
+        {/* Current Form Values Display */}
+        <Panel header="Current Form Values" className="mb-4" toggleable>
+          <pre className="text-sm bg-gray-100 p-3 rounded overflow-auto max-h-64">
+            {JSON.stringify(watchedValues, null, 2)}
+          </pre>
+        </Panel>
+
+        {/* MultiSelect Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+                    {{~ #unless entityDefinition.x-not-selectable}}
+          {/* {{import template="_common/get-entity-name" body=body}} */}
+          <Panel header="{{import template="_common/get-entity-name" body=body}}">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s">
+                {{import template="_common/get-entity-name" body=body}}
+              </label>
+              <{{str-element entityName "." "@last"}}MultiSelect<DemoFormData>
+                control={control}
+                setValue={setValue}
+                name="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s"
+                entityName="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Entities"
+                textName="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Texts"
+                placeholder="Select {{import template="_common/get-entity-name" body=body}}..."
+                required={false}
+              />
+              {errors.{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s && (
+                <small className="p-error">
+                  {errors.{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s?.message}
+                </small>
+              )}
+              <div className="text-xs text-gray-500 mt-1">
+                <div>IDs: [{watchedValues.{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}s?.join(', ') || 'None'}]</div>
+                <div>Texts: [{watchedValues.{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Texts?.join(', ') || 'None'}]</div>
+              </div>
+            </div>
+          </Panel>
+                    {{~/unless}}
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+        </div>
+
+        {/* Hidden Controllers for Entity and Text Fields */}
+        <div style={ { display: 'none' } }>
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+          <Controller
+            name="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Entities"
+            control={control}
+            render={({ field }) => <input {...field} value={field.value ? JSON.stringify(field.value) : '[]'} onChange={() => {}} />}
+          />
+          <Controller
+            name="{{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}Texts"
+            control={control}
+            render={({ field }) => <input {...field} value={field.value ? JSON.stringify(field.value) : '[]'} onChange={() => {}} />}
+          />
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+        </div>
+
+        {/* Form Actions */}
+        <div className="flex gap-2 mt-4">
+          <Button type="submit" label="Submit Form" className="p-button-success" />
+          <Button type="button" label="Reset Form" className="p-button-secondary" onClick={() => reset()} />
+        </div>
+      </form>
+
+      {/* Demo Features Info */}
+      <Panel header="Demo Features" className="mt-4" toggleable collapsed>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Form Integration:</strong> React Hook Form with Controller pattern</li>
+          <li><strong>Real-time Updates:</strong> Values update immediately on selection</li>
+          <li><strong>Entity Binding:</strong> Full entity objects array available via entityName prop</li>
+          <li><strong>Text Binding:</strong> Display texts array available via textName prop</li>
+          <li><strong>TypeScript Support:</strong> Full type safety throughout</li>
+          <li><strong>Caching:</strong> API responses cached for 30 minutes</li>
+          <li><strong>Multiple Selection:</strong> Select multiple items with chip display</li>
+        </ul>
+      </Panel>
+    </div>
+  );
+}

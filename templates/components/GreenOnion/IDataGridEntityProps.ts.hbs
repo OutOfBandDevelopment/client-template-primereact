@@ -1,0 +1,61 @@
+import type { DataTableProps } from 'primereact/datatable';
+import type { ColumnProps } from 'primereact/column';
+
+export interface IDataGridColumn<TEntity> extends Omit<ColumnProps, 'field'> {
+  /** Field name from entity */
+  field: keyof TEntity | string;
+  /** Column header text */
+  header: string;
+  /** Whether column is sortable */
+  sortable?: boolean;
+  /** Whether column is filterable */
+  filterable?: boolean;
+  /** Custom body template */
+  body?: (rowData: TEntity) => React.ReactNode;
+}
+
+export interface IDataGridEntityProps<TEntity> extends Omit<
+  DataTableProps<TEntity[]>,
+  'value' | 'loading' | 'rows' | 'totalRecords' | 'onPage' | 'onSort' | 'onFilter'
+> {
+  /** Custom columns configuration (optional - will auto-generate if not provided) */
+  columns?: IDataGridColumn<TEntity>[];
+  /** Number of rows per page */
+  pageSize?: number;
+  /** Whether to show pagination */
+  paginator?: boolean;
+  /** Whether to allow row selection */
+  selectionMode?: 'single' | 'multiple' | 'checkbox' | null;
+  /** Currently selected row(s) */
+  selection?: TEntity | TEntity[] | null;
+  /** Handler for selection change */
+  onSelectionChange?: (selection: TEntity | TEntity[] | null) => void;
+  /** Handler for row click */
+  onRowClick?: (entity: TEntity) => void;
+  /** Handler for row double click */
+  onRowDoubleClick?: (entity: TEntity) => void;
+  /** Whether to show grid lines */
+  showGridlines?: boolean;
+  /** Whether to use striped rows */
+  stripedRows?: boolean;
+  /** CSS class name */
+  className?: string;
+  /** Whether to enable global filter */
+  globalFilterEnabled?: boolean;
+  /** Placeholder for global filter */
+  globalFilterPlaceholder?: string;
+  /** Whether to show export buttons */
+  exportEnabled?: boolean;
+  /** Custom toolbar content */
+  toolbar?: React.ReactNode;
+  /** Empty message when no data */
+  emptyMessage?: string;
+  /** Error callback */
+  onLoadError?: (error: string) => void;
+  /** Data loaded callback */
+  onDataLoaded?: (data: TEntity[], totalRecords: number) => void;
+  /** Additional filter to apply to query */
+  additionalFilter?: Record<string, any>;
+  /** Whether to auto-load data on mount */
+  autoLoad?: boolean;
+}

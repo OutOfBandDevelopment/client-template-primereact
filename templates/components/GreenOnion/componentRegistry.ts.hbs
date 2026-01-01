@@ -1,0 +1,152 @@
+{{ import "_common/file_header.ts" }}
+
+import { lazy, ComponentType } from 'react';
+
+/**
+ * Generated Component Registry for Navigation Target Mapping
+ *
+ * Maps x-navigation-target values to their corresponding ComboBox and MultiSelect components.
+ * Used by FilterControl, PropertyEditor, and other components that need to dynamically
+ * render selection controls based on schema metadata.
+ *
+ * This file is auto-generated - do not modify manually.
+ */
+
+// Lazy load ComboBox components
+const comboboxComponents = {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+{{~#if-starts @built.class "Query"~}}
+{{~#if-ends @built.class "Model"~}}
+{{~#unless model.x-not-selectable }}
+  '{{@built.class}}': lazy(() => import('@/components/{{@namespace}}/{{@built.class}}/ComboBox')),
+{{ /unless~}}
+{{~/if-ends~}}
+{{~/if-starts~}}
+{{/each}}
+} as const;
+
+// Lazy load MultiSelect components
+const multiselectComponents = {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+{{~#if-starts @built.class "Query"~}}
+{{~#if-ends @built.class "Model"~}}
+{{~#unless model.x-not-selectable }}
+  '{{@built.class}}': lazy(() => import('@/components/{{@namespace}}/{{@built.class}}/MultiSelect')),
+{{ /unless~}}
+{{~/if-ends~}}
+{{~/if-starts~}}
+{{/each}}
+} as const;
+
+// Type definitions
+export type ComboboxComponentKey = keyof typeof comboboxComponents;
+export type MultiselectComponentKey = keyof typeof multiselectComponents;
+
+/**
+ * Extract the model name from a full navigation target string
+ * @param navigationTarget Full navigation target like "GreenOnion.Common.Models.QueryManufacturerModel"
+ * @returns The model name like "QueryManufacturerModel"
+ */
+export function extractModelName(navigationTarget: string): string {
+  const parts = navigationTarget.split('.');
+  return parts[parts.length - 1] || navigationTarget;
+}
+
+/**
+ * Get the ComboBox component for a navigation target
+ * @param navigationTarget The x-navigation-target value from Zod schema
+ * @returns The lazy-loaded component or null if not found
+ */
+export function getComboboxComponent(navigationTarget: string): ComponentType<any> | null {
+  const modelName = extractModelName(navigationTarget);
+  return comboboxComponents[modelName as ComboboxComponentKey] || null;
+}
+
+/**
+ * Get the MultiSelect component for a navigation target
+ * @param navigationTarget The x-navigation-target value from Zod schema
+ * @returns The lazy-loaded component or null if not found
+ */
+export function getMultiSelectComponent(navigationTarget: string): ComponentType<any> | null {
+  const modelName = extractModelName(navigationTarget);
+  return multiselectComponents[modelName as MultiselectComponentKey] || null;
+}
+
+/**
+ * Check if a navigation target has a registered ComboBox component
+ * @param navigationTarget The x-navigation-target value from Zod schema
+ * @returns True if a component is registered
+ */
+export function hasComboboxComponent(navigationTarget: string): boolean {
+  const modelName = extractModelName(navigationTarget);
+  return modelName in comboboxComponents;
+}
+
+/**
+ * Check if a navigation target has a registered MultiSelect component
+ * @param navigationTarget The x-navigation-target value from Zod schema
+ * @returns True if a component is registered
+ */
+export function hasMultiSelectComponent(navigationTarget: string): boolean {
+  const modelName = extractModelName(navigationTarget);
+  return modelName in multiselectComponents;
+}
+
+/**
+ * Get all available model names that have registered components
+ */
+export function getAvailableModels(): string[] {
+  return Object.keys(comboboxComponents);
+}
+
+/**
+ * Type guard to check if a string is a valid model name
+ */
+export function isValidModelName(modelName: string): modelName is ComboboxComponentKey {
+  return modelName in comboboxComponents;
+}
+
+/**
+ * Navigation target to model name mapping
+ * Maps full navigation targets to their short model names
+ */
+export const NAVIGATION_TARGET_MAP: Record<string, string> = {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+{{~#if-starts @built.class "Query"~}}
+{{~#if-ends @built.class "Model"~}}
+  '{{@built.full-class}}': '{{@built.class}}',
+{{~/if-ends~}}
+{{~/if-starts~}}
+{{/each}}
+};
+
+/**
+ * Get model name from full navigation target using the pre-computed map
+ */
+export function getModelFromNavigationTarget(navigationTarget: string): string | null {
+  // Try the full mapping first
+  if (navigationTarget in NAVIGATION_TARGET_MAP) {
+    return NAVIGATION_TARGET_MAP[navigationTarget];
+  }
+  // Fallback to extracting from the string
+  const modelName = extractModelName(navigationTarget);
+  return modelName in comboboxComponents ? modelName : null;
+}

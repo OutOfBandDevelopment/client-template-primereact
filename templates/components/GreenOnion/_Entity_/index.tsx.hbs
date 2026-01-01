@@ -1,0 +1,82 @@
+{{ import "_common/file_header.ts" }}
+/*
+## Action
+{{import template="_common/action-definition" 
+         request=request 
+         uri=uri 
+         }}
+## Entity
+{{import template="_common/entity-definition"
+         name=@entityNameFull
+         def=entityDefinition
+         }}
+*/
+
+{{~#unless @def.x-not-selectable}}
+{{~call template="components/GreenOnion/_Entity_/ComboBox.tsx"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/ComboBox")
+        }}
+{{~call template="components/GreenOnion/_Entity_/MultiSelect.tsx"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/MultiSelect")
+        }}
+{{~/unless}}
+{{~call template="components/GreenOnion/_Entity_/DataGrid.tsx"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/DataGrid")
+        }}
+{{~call template="components/GreenOnion/_Entity_/PropertyEditor.tsx"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/PropertyEditor")
+        }}
+{{~call template="components/GreenOnion/_Entity_/EntityForm.tsx"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/EntityForm")
+        }}
+{{~call template="components/GreenOnion/_Entity_/FormSchema.ts"
+        name=(concat "components/GreenOnion/" @entityNameSimple "/FormSchema")
+        }}
+
+{{#unless @def.x-not-selectable}}
+export { default as {{@entityNameSimple}}ComboBox } from "./ComboBox"
+export { default as {{@entityNameSimple}}MultiSelect } from "./MultiSelect"
+{{#if @def.x-combobox-variants}}
+// Variant types and labels for ComboBox
+export type { {{@entityNameSimple}}ComboBoxVariant } from "./ComboBox"
+export { variantLabels as {{@entityNameSimple}}ComboBoxVariantLabels } from "./ComboBox"
+// Variant types and labels for MultiSelect
+export type { {{@entityNameSimple}}MultiSelectVariant } from "./MultiSelect"
+export { variantLabels as {{@entityNameSimple}}MultiSelectVariantLabels } from "./MultiSelect"
+{{/if}}
+{{/unless}}
+export { default as {{@entityNameSimple}}DataGrid } from "./DataGrid"
+export { default as {{@entityNameSimple}}PropertyEditor } from "./PropertyEditor"
+{{#if @clientName}}
+export { default as {{@entityNameSimple}}EntityForm } from "./EntityForm"
+{{/if}}
+export { {{@entityNameSimple}}FormSchema } from "./FormSchema"
+{{!-- 
+    httpMethod: httpMethod
+    entityName-full: {{@entityNameFull}} 
+    entityName: {{@entityNameSimple}}           
+    query-set: {{requestBody.x-query-set}}
+    query-action: {{requestBody.x-query-action}}
+    request: {{request}}
+    entityDefinition: {{entityDefinition}}
+--}}
+
+{{~call template="pages/GreenOnion/_Entity_/Edit/index.tsx"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/Edit/index")
+        }}
+{{~call template="pages/GreenOnion/_Entity_/Edit/index.scss"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/Edit/index")
+        }}
+{{~call template="pages/GreenOnion/_Entity_/View/index.tsx"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/View/index")
+        }}
+{{~call template="pages/GreenOnion/_Entity_/View/index.scss"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/View/index")
+        }}
+{{~call template="pages/GreenOnion/_Entity_/List/index.tsx"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/List/index")
+        }}
+{{~call template="pages/GreenOnion/_Entity_/List/index.scss"
+        name=(concat "pages/GreenOnion/" @entityNameSimple "/List/index")
+        }}
+           

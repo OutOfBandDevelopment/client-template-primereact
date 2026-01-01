@@ -1,0 +1,401 @@
+/**
+ * Zod Schema Registry Usage Examples
+ * 
+ * This file demonstrates various ways to use the global Zod schema registry
+ * for type-safe schema access and relationship resolution.
+ */
+
+import { z } from 'zod';
+import { 
+  zodRegistry, 
+  getSchema, 
+  getSchemaByFullName, 
+  getSchemaByQuerySet,
+  getSchemaBySymbol,
+  getRelatedEntitySchema,
+  SchemaTypeSymbols,
+  TypedSchemaGetters 
+} from './index';
+
+/**
+ * Example 1: Basic schema lookup by interface name
+ */
+export async function basicSchemaLookup() {
+  console.log('=== Basic Schema Lookup ===');
+  
+  // Get schema by interface name
+  const manufacturerSchema = await getSchema('IQueryManufacturerModel');
+  if (manufacturerSchema) {
+    console.log('✅ Manufacturer schema loaded');
+    console.log('Schema type:', manufacturerSchema._def.typeName);
+    
+    // Extract metadata
+    const metadata = (manufacturerSchema as any)._def?.meta;
+    if (metadata) {
+      console.log('Full name:', metadata['full-name']);
+      console.log('Primary key field:', findPrimaryKey(manufacturerSchema));
+    }
+  }
+
+  // Get schema by full server-side name
+  const userSchema = await getSchemaByFullName('GreenOnion.Common.Models.QueryUserModel');
+  if (userSchema) {
+    console.log('✅ User schema loaded by full name');
+  }
+
+  // Get schema by query set
+  const allergenSchema = await getSchemaByQuerySet('Allergen');
+  if (allergenSchema) {
+    console.log('✅ Allergen schema loaded by query set');
+  }
+}
+
+/**
+ * Example 2: Type-safe schema access using symbols
+ */
+export async function typeSafeSchemaAccess() {
+  console.log('=== Type-Safe Schema Access ===');
+  
+  // Using symbols for compile-time safety
+  const manufacturerSchema = await getSchemaBySymbol(SchemaTypeSymbols.IQueryManufacturerModel);
+  if (manufacturerSchema) {
+    console.log('✅ Manufacturer schema loaded via symbol');
+    
+    // Type-safe validation
+    try {
+      const sampleData = {
+        manufacturerId: 1,
+        manufacturerName: "Test Manufacturer",
+        isActive: true
+      };
+      
+      const validated = manufacturerSchema.parse(sampleData);
+      console.log('✅ Data validation successful:', validated);
+    } catch (error) {
+      console.log('❌ Validation failed:', error);
+    }
+  }
+
+  // Using typed getters for even better type safety
+  const userSchema = await TypedSchemaGetters.getQueryUserModel();
+  if (userSchema) {
+    console.log('✅ User schema loaded via typed getter');
+  }
+}
+
+/**
+ * Example 3: Relationship resolution using x-query-set
+ */
+export async function relationshipResolution() {
+  console.log('=== Relationship Resolution ===');
+  
+  // Get a schema with x-query-set metadata
+  const manufacturerSchema = await getSchema('IQueryManufacturerModel');
+  if (manufacturerSchema) {
+    // Find related entity schema
+    const relatedSchema = await getRelatedEntitySchema(manufacturerSchema);
+    if (relatedSchema) {
+      console.log('✅ Related entity schema found');
+    }
+    
+    // Navigate relationships based on x-navigation-target metadata
+    const fields = extractSchemaFields(manufacturerSchema);
+    for (const field of fields) {
+      if (field.metadata['x-navigation-target']) {
+        console.log(`🔗 Field '${field.name}' links to: ${field.metadata['x-navigation-target']}`);
+        
+        // Try to load the related schema
+        const relatedSchema = await getSchemaByFullName(field.metadata['x-navigation-target']);
+        if (relatedSchema) {
+          console.log(`  ✅ Related schema loaded for ${field.metadata['x-navigation-target']}`);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Example 4: Dynamic grid configuration using registry
+ */
+export async function dynamicGridConfiguration() {
+  console.log('=== Dynamic Grid Configuration ===');
+  
+  // Configure a grid based on schema metadata
+  const entityName = 'Manufacturer';
+  const schema = await getSchemaByQuerySet(entityName);
+  
+  if (schema) {
+    console.log(`✅ Configuring grid for ${entityName}`);
+    
+    const fields = extractSchemaFields(schema);
+    const gridColumns = fields
+      .filter(field => !isMetadataTrue(field.metadata['x-not-filterable']))
+      .map(field => ({
+        field: field.name,
+        header: field.metadata['x-label'] || field.metadata['x-navigation-description'] || formatFieldName(field.name),
+        sortable: !isMetadataTrue(field.metadata['x-not-sortable']),
+        filterable: !isMetadataTrue(field.metadata['x-not-filterable']),
+        searchable: !isMetadataTrue(field.metadata['x-not-searchable']),
+        isPrimaryKey: isMetadataTrue(field.metadata['x-navigation-key']),
+        relationshipTarget: field.metadata['x-navigation-target'],
+        hiddenByDefault: isMetadataTrue(field.metadata['x-hidden-column']),
+        cellRenderer: field.metadata['x-cell-renderer'],
+      }));
+    
+    console.log('Generated grid columns:', gridColumns);
+    
+    // Find primary key for grid configuration
+    const primaryKey = findPrimaryKey(schema);
+    console.log(`Primary key: ${primaryKey}`);
+    
+    // Get default sort configuration
+    const metadata = (schema as any)._def?.meta;
+    const defaultSort = metadata?.['x-default-sort'];
+    console.log(`Default sort: ${defaultSort || 'None specified'}`);
+  }
+}
+
+/**
+ * Example 5: Schema exploration and discovery
+ */
+export async function schemaExploration() {
+  console.log('=== Schema Exploration ===');
+  
+  // Get all query-type schemas
+  const querySchemas = await zodRegistry.getSchemasByType('query');
+  console.log(`Found ${querySchemas.length} query schemas:`);
+  querySchemas.forEach(({ entry }) => {
+    console.log(`  - ${entry.interfaceName} (${entry.fullName})`);
+  });
+  
+  // Search schemas by pattern
+  const searchResults = await zodRegistry.searchSchemas('User');
+  console.log(`\nSchemas matching 'User':`);
+  searchResults.forEach(result => {
+    console.log(`  - ${result.entry.interfaceName} (${result.matchType})`);
+  });
+  
+  // Get registry statistics
+  const stats = zodRegistry.getCacheStats();
+  console.log('\nRegistry Statistics:');
+  console.log(`  - Total registered: ${stats.totalRegistered}`);
+  console.log(`  - Cached: ${stats.cacheSize}`);
+  console.log(`  - Loading: ${stats.loadingPromises}`);
+}
+
+/**
+ * Example 6: Preloading schemas for performance
+ */
+export async function schemaPreloading() {
+  console.log('=== Schema Preloading ===');
+  
+  // Preload commonly used schemas
+  const commonSchemas = [
+    'IQueryManufacturerModel',
+    'IQueryUserModel',
+    'IQueryProductModel',
+    'ISaveManufacturerModel',
+    'ISaveUserModel',
+    'ISaveProductModel'
+  ];
+  
+  console.log('Preloading common schemas...');
+  const startTime = Date.now();
+  
+  await zodRegistry.preloadSchemas(commonSchemas);
+  
+  const endTime = Date.now();
+  console.log(`✅ Preloaded ${commonSchemas.length} schemas in ${endTime - startTime}ms`);
+  
+  // Now these schemas will be instantly available from cache
+  const manufacturerSchema = await getSchema('IQueryManufacturerModel');
+  console.log('✅ Manufacturer schema retrieved from cache instantly');
+}
+
+/**
+ * Example 7: Form generation from schema
+ */
+export async function formGeneration() {
+  console.log('=== Form Generation ===');
+  
+  // Get save schema for form generation
+  const saveSchema = await getSchema('ISaveManufacturerModel');
+  if (saveSchema) {
+    console.log('✅ Save schema loaded for form generation');
+
+    const fields = extractSchemaFields(saveSchema);
+    const formConfig = fields
+      .filter(field => !isMetadataTrue(field.metadata['x-hidden-column']))
+      .map(field => ({
+        name: field.name,
+        type: mapZodTypeToInputType(field.type),
+        label: field.metadata['x-label'] || formatFieldName(field.name),
+        required: !field.isOptional && !field.isNullable,
+        readonly: field.metadata['readOnly'] === true,
+        fieldSet: field.metadata['x-field-set'],
+        cellRenderer: field.metadata['x-cell-renderer'],
+      }));
+
+    console.log('Generated form configuration:', formConfig);
+  }
+}
+
+/**
+ * Example 8: API validation using registry
+ */
+export async function apiValidation() {
+  console.log('=== API Validation ===');
+  
+  // Validate request data
+  const saveSchema = await getSchema('ISaveUserModel');
+  if (saveSchema) {
+    const requestData = {
+      userId: 123,
+      firstName: "John",
+      lastName: "Doe",
+      email: "john.doe@example.com"
+    };
+    
+    try {
+      const validated = saveSchema.parse(requestData);
+      console.log('✅ Request validation successful');
+    } catch (error) {
+      console.log('❌ Request validation failed:', error);
+    }
+  }
+  
+  // Validate response data
+  const querySchema = await getSchema('IQueryUserModel');
+  if (querySchema) {
+    const responseData = {
+      userId: 123,
+      firstName: "John",
+      lastName: "Doe",
+      email: "john.doe@example.com",
+      createdOn: new Date().toISOString()
+    };
+    
+    try {
+      const validated = querySchema.parse(responseData);
+      console.log('✅ Response validation successful');
+    } catch (error) {
+      console.log('❌ Response validation failed:', error);
+    }
+  }
+}
+
+// Helper functions
+
+/**
+ * Helper to check if a metadata value is truthy
+ * Handles both boolean true and string 'True'/'true' formats
+ */
+function isMetadataTrue(value: any): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return false;
+}
+
+function findPrimaryKey(schema: z.ZodSchema): string | null {
+  const fields = extractSchemaFields(schema);
+  const primaryKeyField = fields.find(field => isMetadataTrue(field.metadata['x-navigation-key']));
+  return primaryKeyField?.name || null;
+}
+
+function extractSchemaFields(schema: z.ZodSchema): Array<{
+  name: string;
+  type: string;
+  isOptional: boolean;
+  isNullable: boolean;
+  metadata: Record<string, any>;
+}> {
+  if (!(schema instanceof z.ZodObject)) {
+    return [];
+  }
+  
+  const shape = (schema as any).shape;
+  const fields = [];
+  
+  for (const [key, value] of Object.entries(shape)) {
+    const field = extractFieldInfo(key, value as z.ZodTypeAny);
+    if (field) {
+      fields.push(field);
+    }
+  }
+  
+  return fields;
+}
+
+function extractFieldInfo(name: string, zodType: z.ZodTypeAny) {
+  let type = 'unknown';
+  let isOptional = false;
+  let isNullable = false;
+  let metadata = {};
+  let currentType = zodType;
+
+  // Unwrap optional/nullable
+  while (true) {
+    if (currentType instanceof z.ZodOptional) {
+      isOptional = true;
+      currentType = currentType._def.innerType;
+    } else if (currentType instanceof z.ZodNullable) {
+      isNullable = true;
+      currentType = currentType._def.innerType;
+    } else {
+      break;
+    }
+  }
+
+  // Extract metadata
+  if ((currentType as any)._def?.meta) {
+    metadata = (currentType as any)._def.meta;
+  }
+
+  // Determine type
+  if (currentType instanceof z.ZodString) {
+    type = 'string';
+  } else if (currentType instanceof z.ZodNumber) {
+    type = 'number';
+  } else if (currentType instanceof z.ZodBoolean) {
+    type = 'boolean';
+  } else if (currentType instanceof z.ZodDate) {
+    type = 'date';
+  }
+
+  return {
+    name,
+    type,
+    isOptional,
+    isNullable,
+    metadata
+  };
+}
+
+function formatFieldName(fieldName: string): string {
+  return fieldName
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim();
+}
+
+function mapZodTypeToInputType(zodType: string): string {
+  switch (zodType) {
+    case 'string': return 'text';
+    case 'number': return 'number';
+    case 'boolean': return 'checkbox';
+    case 'date': return 'date';
+    default: return 'text';
+  }
+}
+
+// Export all examples
+export const registryExamples = {
+  basicSchemaLookup,
+  typeSafeSchemaAccess,
+  relationshipResolution,
+  dynamicGridConfiguration,
+  schemaExploration,
+  schemaPreloading,
+  formGeneration,
+  apiValidation
+};

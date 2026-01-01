@@ -1,0 +1,141 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useState } from 'react';
+import { Panel } from 'primereact/panel';
+import { Button } from 'primereact/button';
+import { TabView, TabPanel } from 'primereact/tabview';
+import { Dialog } from 'primereact/dialog';
+
+import { 
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+  {{str-element entityName "." "@last"}}DataGrid,
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import type { 
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+  {{concat "I" (str-element entityName "." "@last")}},
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import './index.scss';
+
+/**
+ * Demo UI page to showcase all DataGrid components
+ */
+export default function DemoDataGrids() {
+  const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const showDetails = (entity: any) => {
+    setSelectedEntity(entity);
+    setDetailsVisible(true);
+  };
+
+  const handleRowDoubleClick = (entity: any) => {
+    showDetails(entity);
+  };
+
+  const handleLoadError = (gridName: string) => (error: string) => {
+    console.error(`Error loading ${gridName}:`, error);
+  };
+
+  const handleDataLoaded = (gridName: string) => (data: any[], totalRecords: number) => {
+    console.log(`${gridName} loaded: ${data.length} rows, ${totalRecords} total`);
+  };
+
+  const renderToolbar = (gridName: string) => (
+    <Button
+      label="Add New"
+      icon="pi pi-plus"
+      className="p-button-success p-button-sm"
+      onClick={() => alert(`Add new ${gridName}`)}
+    />
+  );
+
+  return (
+    <div className="demo-datagrids-page p-4">
+      <h1 className="text-2xl font-bold mb-4">DataGrid Components Demo</h1>
+      <p className="text-gray-600 mb-6">Showcase of all standardized data grid components with sorting, filtering, and pagination</p>
+
+      <TabView activeIndex={activeTab} onTabChange={(e) => setActiveTab(e.index)}>
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+        <TabPanel header="{{import template="_common/get-entity-name" body=body}}">
+          <{{str-element entityName "." "@last"}}DataGrid
+            pageSize={10}
+            paginator={true}
+            selectionMode="single"
+            onRowDoubleClick={handleRowDoubleClick}
+            showGridlines={false}
+            stripedRows={true}
+            globalFilterEnabled={true}
+            exportEnabled={true}
+            toolbar={renderToolbar('{{import template="_common/get-entity-name" body=body}}')}
+            onLoadError={handleLoadError('{{import template="_common/get-entity-name" body=body}}')}
+            onDataLoaded={handleDataLoaded('{{import template="_common/get-entity-name" body=body}}')}
+          />
+        </TabPanel>
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+      </TabView>
+
+      {/* Details Dialog */}
+      <Dialog
+        header="Entity Details"
+        visible={detailsVisible}
+        style={ { width: '50vw' } }
+        onHide={() => setDetailsVisible(false)}
+      >
+        {selectedEntity && (
+          <pre className="text-sm bg-gray-100 p-3 rounded overflow-auto">
+            {JSON.stringify(selectedEntity, null, 2)}
+          </pre>
+        )}
+      </Dialog>
+
+      {/* Demo Features Info */}
+      <Panel header="Demo Features" className="mt-4" toggleable collapsed>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Lazy Loading:</strong> Data loaded on demand with server-side pagination</li>
+          <li><strong>Sorting:</strong> Click column headers to sort</li>
+          <li><strong>Filtering:</strong> Per-column filters and global search</li>
+          <li><strong>Selection:</strong> Single or multiple row selection</li>
+          <li><strong>Export:</strong> Export data to CSV</li>
+          <li><strong>Row Actions:</strong> Double-click to view details</li>
+          <li><strong>Custom Toolbar:</strong> Add custom buttons and actions</li>
+          <li><strong>TypeScript Support:</strong> Full type safety throughout</li>
+        </ul>
+      </Panel>
+    </div>
+  );
+}

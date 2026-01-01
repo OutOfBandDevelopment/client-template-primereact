@@ -1,0 +1,51 @@
+import type { DropdownProps } from 'primereact/dropdown';
+import type { Control, FieldValues, RegisterOptions, UseFormSetValue } from 'react-hook-form';
+
+export interface IEntityOption<TEntity> {
+  value: number;
+  label: string;
+  entity?: TEntity;
+}
+
+export interface IComboboxEntityProps<
+  TEntity,
+  TFormValues extends FieldValues = FieldValues
+> extends Omit<
+  DropdownProps,
+  'options' | 'optionLabel' | 'optionValue' | 'loading' | 'onChange' | 'value'
+> {
+  /** Currently selected ID */
+  value?: number;
+  /** Handler for selection change (ID only) */
+  onChange?: (value: number) => void;
+  /** Handler for full entity selection change */
+  onEntityChange?: (entity: TEntity | null) => void;
+  /** Handler for primary text field change */
+  onTextChange?: (text: string) => void;
+  /** Placeholder text when no value is selected */
+  placeholder?: string;
+  /** CSS class name for styling */
+  className?: string;
+  /** Whether the dropdown is disabled */
+  disabled?: boolean;
+  /** React Hook Form control object */
+  control?: Control<TFormValues>;
+  /** React Hook Form setValue function */
+  setValue?: UseFormSetValue<TFormValues>;
+  /** Form field name for ID binding */
+  name?: string;
+  /** Form field name for entity binding */
+  entityName?: string;
+  /** Form field name for text binding */
+  textName?: string;
+  /** Whether the field is required */
+  required?: boolean;
+  /** Additional validation options for React Hook Form */
+  rules?: RegisterOptions<TFormValues>;
+  /** Include empty option */
+  includeEmpty?: boolean;
+  /** Custom empty option label */
+  emptyLabel?: string;
+  /** Error callback */
+  onLoadError?: (error: string) => void;
+}

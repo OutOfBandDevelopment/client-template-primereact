@@ -1,0 +1,65 @@
+{{ import "_common/file_header.ts" }}
+// Models 
+import type {
+{{#group-by items "$.value.*.requestBody.content['application/json'].schema['$ref']" "$.value.*.responses['200'].content['application/json'].schema['$ref']" "$.value.*.parameters[*].schema['$ref']"}}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+    I{{model}},
+{{#if-regex "SearchQuery$" model}}
+    I{{String.Replace (to-string model) "SearchQuery" ""}}Filter,
+    I{{String.Replace (to-string model) "SearchQuery" ""}}OrderBy,
+{{/if-regex}}
+{{/with}}
+{{/if}}
+{{/group-by}}
+ } from "./Models";
+
+{{#if-jsonpath items "$.value.*.tags[?match(@, '^model-.*')]"}}
+ import type {
+    IQueryable,
+    IGettable,
+    ISaveable,
+    IDeleteable,
+ } from '../_ClientBase'
+ {{/if-jsonpath}}
+ 
+export type {
+{{#group-by items "$.value.*.requestBody.content['application/json'].schema['$ref']" "$.value.*.responses['200'].content['application/json'].schema['$ref']" "$.value.*.parameters[*].schema['$ref']"}}
+{{#if key}}
+{{#with (str-element (str-element key "/" "@last") "." "@last") as |model|}}
+    I{{model}},
+{{/with}}
+{{/if}}
+{{/group-by}}
+ };
+
+interface IGeneratedClient {};
+
+export default interface I{{key}}Client {{~ import "_helpers/ClientInterfaceExtended"~}} {
+{{#each items as |item|}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.post.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.post as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    {{import "_helpers/ClientOperationMethodSignature"}};
+    {{/with}}
+    {{/with}}
+    {{/with}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.get.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.get as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    {{import "_helpers/ClientOperationMethodSignature"}};
+    {{/with}}
+    {{/with}}
+    {{/with}}
+    {{#with key as |operationUrl|}}
+    {{#with (str-element item.value.delete.operationId "_" "@last") as |operationName|}}
+    {{#with item.value.delete as |operation|}}
+    {{import "_helpers/ClientOperationMethodSignaturePrefix"}}
+    {{import "_helpers/ClientOperationMethodSignature"}};
+    {{/with}}
+    {{/with}}
+    {{/with}}
+{{/each}}
+}

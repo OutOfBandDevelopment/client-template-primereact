@@ -1,0 +1,23 @@
+{{operationName}}(
+{{~#if-or 
+    operation.parameters 
+    (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "$ref") 
+    (lookup (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "items") "$ref")
+    ~}}
+        params: {
+        {{#each operation.parameters as |parameter| }}
+            {{parameter.name}}?: {{ import "_helpers/ResolveType" value=parameter}};
+        {{/each}}
+    {{#with (lookup operation.requestBody.content "application/json") as |requestContent| }}
+        body?: {{ import "_helpers/ResolveType"}};
+    {{/with}}
+    {{!-- TODO: this does not currently support FromForm! --}}
+    }
+{{~/if-or~}}
+    ): {{#with (lookup operation.responses "200") as |response|~}}
+    {{~#with (lookup response.content "application/json") as |responseBody|~}}
+         Promise<{{~ import "_helpers/ResolveType" ~}}>
+    {{~else~}}
+         Promise<void>
+    {{~/with~}}
+    {{~/with~}}

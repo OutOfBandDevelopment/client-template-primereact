@@ -1,0 +1,12 @@
+{{ import "_common/file_header.ts" }}
+
+// Models
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder~}}
+export type { {{@built.interface}}  } from "./{{@built.class}}"; {{call template="api/GreenOnion/Models/{Entity}Model.ts" name=(concat "api/GreenOnion/Models/" @built.class) node=@built}}
+{{/each}} 

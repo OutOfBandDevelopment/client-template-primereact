@@ -1,0 +1,36 @@
+full-name: {{@name}}
+  interface: I{{~str-element @name "." "@last"}}
+  schema: Z{{~str-element @name "." "@last"}}
+  class: {{str-element @name "." "@last"}}
+  {{#if @def.enum}}
+  base-type: enum
+  values: 
+    {{#each @def.enum as |value|}}
+    - {{value}}
+    {{/each}}
+  {{else}}
+  base-type: {{@def.type}}
+  properties:
+    | Property Name | Type | Not Filterable | Not Searchable | Hidden Column | Display Value | Navigation Key | Nullable | Required |
+    |---------------|------|----------------|----------------|---------------|---------------|----------------|----------|----------|
+    {{#each @def.properties as |property propertyName|}}
+    | {{propertyName~}} 
+    | {{import template="_common/schema-template" schema=property notNullable=true~}}
+    | {{property.x-not-filterable~}}
+    | {{property.x-not-searchable~}}
+    | {{property.x-hidden-column~}}
+    | {{property.x-display-value~}}
+    | {{property.x-navigation-key~}}
+    | {{property.nullable~}}
+    | {{#each @def.required as |value|}}
+      {{~#if-any value propertyName~}}
+      True
+      {{~/if-any~}}
+    {{~/each ~}}
+    |
+    {{/each}}
+  {{/if}}
+  {{#if @def.x-query-set}}
+  query-set: {{@def.x-query-set}}
+  {{/if}}
+{{!-- definition: {{def}} --}}

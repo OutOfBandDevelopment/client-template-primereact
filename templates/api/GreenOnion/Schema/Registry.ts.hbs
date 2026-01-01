@@ -1,0 +1,379 @@
+{{ import "_common/file_header.ts" }}
+{{call template="api/GreenOnion/Schema/RegistryExamples.ts" name=(concat "api/GreenOnion/Schema/Registry/examples") node=this}}
+import { z } from 'zod';
+
+/**
+ * Global Zod Schema Registry
+ * 
+ * This registry provides a centralized way to access all Zod schemas with support for:
+ * - Interface name lookup (e.g., 'IQueryManufacturerModel')
+ * - Full name metadata lookup (e.g., 'GreenOnion.Common.Models.QueryManufacturerModel')
+ * - Query set relationships (x-query-set metadata)
+ * - Symbol-based type queries for compile-time safety
+ * - Dynamic schema loading and caching
+ */
+
+// Schema import types for lazy loading
+type SchemaImporter<T extends z.ZodSchema = z.ZodSchema> = () => Promise<{ default: T }>;
+
+// Registry configuration interface
+export interface SchemaRegistryEntry {
+  interfaceName: string;
+  fullName?: string;
+  querySet?: string;
+  schemaType: 'request' | 'response' | 'orderby' | 'filter' | 'result' | 'query' | 'save' | 'model' | 'other';
+  loader: SchemaImporter;
+}
+
+// Type symbols for compile-time type safety
+export const SchemaTypeSymbols = {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+  {{@built.interface}}: Symbol('{{@built.interface}}'),
+{{/each}} 
+} as const;
+
+// Reverse lookup map for symbols
+const symbolToInterfaceName = new Map<symbol, string>();
+Object.entries(SchemaTypeSymbols).forEach(([interfaceName, symbol]) => {
+  symbolToInterfaceName.set(symbol, interfaceName);
+});
+
+// Schema registry entries
+export const SCHEMA_REGISTRY: SchemaRegistryEntry[] = [
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+  {
+    interfaceName: '{{@built.interface}}',
+    fullName: '{{@built.full-class}}',
+    querySet: '{{@built.class}}',
+    schemaType: '{{~#if-ends @built.class "RequestModel"~}}
+      request
+    {{~else~}}{{~#if-ends @built.class "ResponseModel"~}}
+      response
+    {{~else~}}{{~#if-ends @built.class "OrderBy"~}}
+      orderby
+    {{~else~}}{{~#if-ends @built.class "Filter"~}}
+      filter
+    {{~else~}}{{~#if-ends @built.class "PagedQueryResult"~}}
+      result
+    {{~else~}}{{~#if-ends @built.class "SearchQuery"~}}
+      query
+    {{~else~}}{{~#if-ends @built.class "Model"~}}
+      {{~#if-starts @built.class "Save"~}}
+        save
+      {{~else~}}
+        model
+      {{~/if-starts~}}
+    {{~else~}}
+      other
+    {{~/if-ends~}}
+    {{~/if-ends~}}
+    {{~/if-ends~}}
+    {{~/if-ends~}}
+    {{~/if-ends~}}
+    {{~/if-ends~}}
+    {{~/if-ends~}}', 
+    loader: () => import('@/api/{{@namespace}}/Schema/{{@built.schema}}')
+  },
+{{/each}} 
+];
+
+// Schema cache for performance
+const schemaCache = new Map<string, z.ZodSchema>();
+const loadingPromises = new Map<string, Promise<z.ZodSchema>>();
+
+/**
+ * Global Zod Schema Registry Class
+ */
+export class ZodSchemaRegistry {
+  private static instance: ZodSchemaRegistry;
+  
+  private constructor() {}
+
+  public static getInstance(): ZodSchemaRegistry {
+    if (!ZodSchemaRegistry.instance) {
+      ZodSchemaRegistry.instance = new ZodSchemaRegistry();
+    }
+    return ZodSchemaRegistry.instance;
+  }
+
+  /**
+   * Get schema by interface name
+   */
+  public async getSchemaByInterface<T extends z.ZodSchema = z.ZodSchema>(
+    interfaceName: string
+  ): Promise<T | null> {
+    const cacheKey = `interface:${interfaceName}`;
+    
+    if (schemaCache.has(cacheKey)) {
+      return schemaCache.get(cacheKey) as T;
+    }
+
+    if (loadingPromises.has(cacheKey)) {
+      return loadingPromises.get(cacheKey) as Promise<T>;
+    }
+
+    const entry = SCHEMA_REGISTRY.find(e => e.interfaceName === interfaceName);
+    if (!entry) {
+      console.warn(`No schema registry entry found for interface: ${interfaceName}`);
+      return null;
+    }
+
+    const loadingPromise = this.loadSchema<T>(entry, cacheKey);
+    loadingPromises.set(cacheKey, loadingPromise);
+    
+    return loadingPromise;
+  }
+
+  /**
+   * Get schema by full name (server-side class name)
+   */
+  public async getSchemaByFullName<T extends z.ZodSchema = z.ZodSchema>(
+    fullName: string
+  ): Promise<T | null> {
+    const cacheKey = `fullname:${fullName}`;
+    
+    if (schemaCache.has(cacheKey)) {
+      return schemaCache.get(cacheKey) as T;
+    }
+
+    if (loadingPromises.has(cacheKey)) {
+      return loadingPromises.get(cacheKey) as Promise<T>;
+    }
+
+    const entry = SCHEMA_REGISTRY.find(e => e.fullName === fullName);
+    if (!entry) {
+      console.warn(`No schema registry entry found for full name: ${fullName}`);
+      return null;
+    }
+
+    const loadingPromise = this.loadSchema<T>(entry, cacheKey);
+    loadingPromises.set(cacheKey, loadingPromise);
+    
+    return loadingPromise;
+  }
+
+  /**
+   * Get schema by query set (x-query-set metadata)
+   */
+  public async getSchemaByQuerySet<T extends z.ZodSchema = z.ZodSchema>(
+    querySet: string
+  ): Promise<T | null> {
+    const cacheKey = `queryset:${querySet}`;
+    
+    if (schemaCache.has(cacheKey)) {
+      return schemaCache.get(cacheKey) as T;
+    }
+
+    if (loadingPromises.has(cacheKey)) {
+      return loadingPromises.get(cacheKey) as Promise<T>;
+    }
+
+    const entry = SCHEMA_REGISTRY.find(e => e.querySet === querySet);
+    if (!entry) {
+      console.warn(`No schema registry entry found for query set: ${querySet}`);
+      return null;
+    }
+
+    const loadingPromise = this.loadSchema<T>(entry, cacheKey);
+    loadingPromises.set(cacheKey, loadingPromise);
+    
+    return loadingPromise;
+  }
+
+  /**
+   * Get schema by type symbol (compile-time safe)
+   */
+  public async getSchemaBySymbol<T extends z.ZodSchema = z.ZodSchema>(
+    typeSymbol: symbol
+  ): Promise<T | null> {
+    const interfaceName = symbolToInterfaceName.get(typeSymbol);
+    if (!interfaceName) {
+      console.warn(`No interface name found for symbol: ${typeSymbol.toString()}`);
+      return null;
+    }
+
+    return this.getSchemaByInterface<T>(interfaceName);
+  }
+
+  /**
+   * Get related entity schema by x-query-set metadata
+   */
+  public async getRelatedEntitySchema<T extends z.ZodSchema = z.ZodSchema>(
+    schema: z.ZodSchema
+  ): Promise<T | null> {
+    const metadata = this.extractSchemaMetadata(schema);
+    if (!metadata?.['x-query-set']) {
+      return null;
+    }
+
+    const querySet = metadata['x-query-set'];
+    const relatedEntry = SCHEMA_REGISTRY.find(e => e.fullName && e.fullName.includes(querySet));
+    
+    if (!relatedEntry) {
+      return null;
+    }
+
+    return this.getSchemaByInterface<T>(relatedEntry.interfaceName);
+  }
+
+  /**
+   * Get schemas by type category
+   */
+  public async getSchemasByType(
+    schemaType: 'query' | 'save' | 'filter' | 'orderby' | 'response' | 'request'
+  ): Promise<Array<{ entry: SchemaRegistryEntry; schema: z.ZodSchema }>> {
+    const entries = SCHEMA_REGISTRY.filter(e => e.schemaType === schemaType);
+    const results = await Promise.all(
+      entries.map(async entry => ({
+        entry,
+        schema: await this.getSchemaByInterface(entry.interfaceName) as z.ZodSchema
+      }))
+    );
+    
+    return results.filter(r => r.schema !== null);
+  }
+
+  /**
+   * Search schemas by pattern
+   */
+  public async searchSchemas(pattern: string): Promise<Array<{
+    entry: SchemaRegistryEntry;
+    matchType: 'interface' | 'fullname' | 'queryset';
+    schema?: z.ZodSchema;
+  }>> {
+    const results: Array<{
+      entry: SchemaRegistryEntry;
+      matchType: 'interface' | 'fullname' | 'queryset';
+      schema?: z.ZodSchema;
+    }> = [];
+
+    const regex = new RegExp(pattern, 'i');
+
+    for (const entry of SCHEMA_REGISTRY) {
+      if (regex.test(entry.interfaceName)) {
+        results.push({
+          entry,
+          matchType: 'interface',
+          schema: await this.getSchemaByInterface(entry.interfaceName) || undefined
+        });
+      } else if (entry.fullName && regex.test(entry.fullName)) {
+        results.push({
+          entry,
+          matchType: 'fullname',
+          schema: await this.getSchemaByInterface(entry.interfaceName) || undefined
+        });
+      } else if (entry.querySet && regex.test(entry.querySet)) {
+        results.push({
+          entry,
+          matchType: 'queryset',
+          schema: await this.getSchemaByInterface(entry.interfaceName) || undefined
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Get all registry entries
+   */
+  public getRegistryEntries(): readonly SchemaRegistryEntry[] {
+    return SCHEMA_REGISTRY;
+  }
+
+  /**
+   * Preload specific schemas for performance
+   */
+  public async preloadSchemas(interfaceNames: string[]): Promise<void> {
+    await Promise.all(
+      interfaceNames.map(name => this.getSchemaByInterface(name))
+    );
+  }
+
+  /**
+   * Clear cache
+   */
+  public clearCache(): void {
+    schemaCache.clear();
+    loadingPromises.clear();
+  }
+
+  /**
+   * Get cache statistics
+   */
+  public getCacheStats(): {
+    cacheSize: number;
+    loadingPromises: number;
+    totalRegistered: number;
+  } {
+    return {
+      cacheSize: schemaCache.size,
+      loadingPromises: loadingPromises.size,
+      totalRegistered: SCHEMA_REGISTRY.length
+    };
+  }
+
+  private async loadSchema<T extends z.ZodSchema>(
+    entry: SchemaRegistryEntry,
+    cacheKey: string
+  ): Promise<T> {
+    try {
+      const module = await entry.loader();
+      const schema = module.default as T;
+      
+      schemaCache.set(cacheKey, schema);
+      loadingPromises.delete(cacheKey);
+      
+      return schema;
+    } catch (error) {
+      loadingPromises.delete(cacheKey);
+      console.error(`Failed to load schema for ${entry.interfaceName}:`, error);
+      throw error;
+    }
+  }
+
+  private extractSchemaMetadata(schema: z.ZodSchema): Record<string, any> | null {
+    if ('_def' in schema && schema._def && 'meta' in schema._def) {
+      return schema._def.meta as Record<string, any>;
+    }
+    return null;
+  }
+}
+
+// Export singleton instance
+export const zodRegistry = ZodSchemaRegistry.getInstance();
+
+// Convenience functions
+export const getSchema = zodRegistry.getSchemaByInterface.bind(zodRegistry);
+export const getSchemaByFullName = zodRegistry.getSchemaByFullName.bind(zodRegistry);
+export const getSchemaByQuerySet = zodRegistry.getSchemaByQuerySet.bind(zodRegistry);
+export const getSchemaBySymbol = zodRegistry.getSchemaBySymbol.bind(zodRegistry);
+export const getRelatedEntitySchema = zodRegistry.getRelatedEntitySchema.bind(zodRegistry);
+
+// Type-safe schema getters using symbols
+export const TypedSchemaGetters = {
+{{#each components.schemas as |model|}}
+{{~#builder "built"~}}
+    {{~builder-set "class" (str-element @key "." "@last")~}}
+    {{~builder-set "full-class" @key~}}
+    {{~builder-set "interface" (concat "I" (str-element @key "." "@last"))~}}
+    {{~builder-set "schema" (concat "Z" (str-element @key "." "@last"))~}}
+    {{~builder-set "definition" model~}}
+{{~/builder}}
+  get{{@built.class}}: () => getSchemaBySymbol(SchemaTypeSymbols.{{@built.interface}}),
+{{/each}}
+} as const;

@@ -1,0 +1,75 @@
+ 
+    { 
+        let url_ = this.baseUrl + "{{operationUrl}}?";
+        {{#if operation.parameters}}
+        const { {{#each operation.parameters as |parameter| }}{{parameter.name}}, {{/each}} } = params;
+        {{#each operation.parameters as |parameter| }}
+        if ({{parameter.name}} !== undefined)
+            url_ += "{{parameter.name}}=" + encodeURIComponent("" + {{parameter.name}}) + "&";
+        {{/each}}
+        {{/if}}
+        url_ = url_.replace(/[?&]$/, "");
+    {{#if-or (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "$ref")
+             (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "items")
+            }}
+        const { body } = params;
+        const content_ = JSON.stringify(body);
+    {{/if-or}}
+        const options_: RequestInit = {
+    {{#if-or (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "$ref")
+             (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "items")
+            }}
+            body: content_,
+    {{/if-or}}
+            method: "{{@httpMethod}}",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "text/plain"
+            }
+        };
+
+        const transformedOptions = await this.transformOptions(options_);
+        const response = await  this.http.fetch(url_, transformedOptions);
+    {{#if responses.200.content}}
+        const processed = await this.process{{operationName}}(response);
+        return processed;
+    {{else}}
+        await this.process{{operationName}}(response);
+    {{/if}}
+    }
+
+    protected async process{{operationName}}(response: Response): {{#with (lookup operation.responses "200") as |response|~}}
+{{~#with (lookup response.content "application/json") as |responseBody|~}}
+Promise<{{~ import "_helpers/ResolveType" ~}}>
+{{~else~}}
+Promise<unknown | undefined>
+{{~/with~}}
+{{~/with}} 
+
+    {
+        const status = response.status;
+        const _headers: Record<string, unknown> = {};
+        if (response.headers && response.headers.forEach) {
+            response.headers.forEach((v: unknown, k: string) => _headers[k] = v); 
+        };
+        if (status === 200) {
+            const _responseText = await response.text();
+            const resultData200 = _responseText === "" ? null : JSON.parse(_responseText, this.jsonParseReviver);
+        {{#with (lookup (lookup (lookup (lookup (lookup operation.responses "200") content) "application/json") "schema") "$ref")}}
+            const result200 = Z{{str-element (str-element this "/" "@last") "." "@last"~}}.parse(resultData200);
+        {{else}}
+        {{#with (lookup (lookup (lookup (lookup (lookup (lookup operation.responses "200") content) "application/json") "schema") "items") "$ref")}}
+            const result200 = Z{{str-element (str-element this "/" "@last") "." "@last"~}}.array().parse(resultData200);
+        {{else}}
+            const result200 = JSON.parse(resultData200);
+        {{/with}} 
+        {{/with}}      
+            return result200;
+        } else if (status !== 200 && status !== 204) {
+            const _responseText = await response.text();
+            if (_responseText !== "") {
+                const resultData200 = JSON.parse(_responseText, this.jsonParseReviver);
+                return resultData200;
+            }
+        }
+    }

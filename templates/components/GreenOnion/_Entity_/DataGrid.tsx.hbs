@@ -1,0 +1,491 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from 'primereact/button';
+import { Tag } from 'primereact/tag';
+import { SimpleGenericGrid } from '@/components/ui/prime/GenericGrid/SimpleGenericGrid';
+import type { PredefinedFilter } from '@/components/ui/prime/GenericGrid/types';
+import type { GenericGridColumn } from '@/components/ui/prime/GenericGrid/types';
+import {{@clientName}} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+import { buildColumnsFromSchema, ColumnRenderers } from '@/utils/schemaBasedColumnBuilder';
+import { getSchema } from '@/api/{{@namespace}}/Schema/Registry';
+import { usePermissions } from '@/hooks/usePermissions';
+import type { UserRole } from '@/types/roles';
+import type { z } from 'zod';
+import type {
+  {{@entityInterface}},
+  {{@entityInterface}}SearchQuery,
+  {{@entityInterface}}Filter,
+  {{@entityInterface}}OrderBy,
+  IFilterParameter
+} from '@/api/{{@namespace}}/Models';
+
+/**
+ * Props interface for {{@entityNameSimple}}Data component
+ */
+export interface {{@entityNameSimple}}DataProps {
+  /** Title for the grid */
+  title?: string;
+  /** Enable create button (default: {{#if @def.x-not-creatable}}false{{else}}true{{/if}}) */
+  enableCreate?: boolean;
+  /** Text for create button */
+  createButtonText?: string;
+  /** Custom create handler - if not provided, uses default navigation */
+  onCreateClick?: () => void;
+  /** Custom edit handler - if not provided, uses default navigation */
+  onEditClick?: (id: number) => void;
+  /** Custom view handler - if not provided, uses default navigation */
+  onViewClick?: (id: number) => void;
+  /** Row click handler */
+  onRowClick?: (data: {{@entityInterface}}) => void;
+  /** Enable edit action (default: {{#if @def.x-read-only}}false{{else}}true{{/if}}) */
+  enableEdit?: boolean;
+  /** Enable view action (default: true) */
+  enableView?: boolean;
+  /** Additional CSS class for styling */
+  className?: string;
+  /** Initial filters to apply */
+  initialFilter?: Record<string, IFilterParameter>;
+  /** Locked filters that cannot be modified by users */
+  lockedFilters?: Record<string, IFilterParameter>;
+  /** Override which columns to show */
+  visibleColumns?: string[];
+  /** Callback when data is fetched */
+  onDataFetch?: (data: {{@entityInterface}}[]) => void;
+  /** Custom search placeholder */
+  searchPlaceholder?: string;
+  /** Enable specific features */
+  enableSearch?: boolean;
+  enableFilter?: boolean;
+  enableSort?: boolean;
+  enableColumnVisibility?: boolean;
+  enableColumnReordering?: boolean;
+  /** Enable bulk selection */
+  enableBulkSelection?: boolean;
+  /** Bulk selection handler */
+  onBulkSelect?: (selectedIds: number[]) => void;
+  /** Initial page size */
+  initialPageSize?: number;
+  /** Use React Router navigation instead of window.location */
+  useReactRouter?: boolean;
+  /** Roles required to create (if not set, uses schema x-permissions or allows all) */
+  requiredRolesForCreate?: UserRole[];
+  /** Roles required to edit (if not set, uses schema x-permissions or allows all) */
+  requiredRolesForEdit?: UserRole[];
+}
+
+/**
+ * {{@entityNameSimple}}Data component - Reusable grid with Generic Grid integration
+ * Now using schema-based column generation with swagger metadata integration
+ * Supports FilterSidebar with full CRUD operations
+ */
+export default function {{@entityNameSimple}}Data({
+  title = "{{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} Management",
+  enableCreate = {{#if @def.x-not-creatable}}false{{else}}true{{/if}},
+  createButtonText = "Create {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}",
+  onCreateClick,
+  onEditClick,
+  onViewClick,
+  onRowClick,
+  enableEdit = {{#if @def.x-read-only}}false{{else}}true{{/if}},
+  enableView = true,
+  className = "{{@entityNameSimple}}-data-grid",
+  initialFilter = {},
+  lockedFilters = {},
+  visibleColumns,
+  onDataFetch,
+  searchPlaceholder = "Search {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}...",
+  enableSearch = true,
+  enableFilter = true,
+  enableSort = true,
+  enableColumnVisibility = true,
+  enableColumnReordering = true,
+  enableBulkSelection = true,
+  onBulkSelect,
+  initialPageSize = 20,
+  useReactRouter = false,
+  requiredRolesForCreate,
+  requiredRolesForEdit,
+}: {{@entityNameSimple}}DataProps) {
+  // Navigation hook for React Router support
+  const navigate = useNavigate();
+
+  // Permission hook for role-based access control
+  const { hasAnyRole } = usePermissions();
+
+  // Create client instance
+  const clientInstance = useMemo(() => new {{@clientName}}(), []);
+
+  // Permission-based feature flags
+  // Uses explicit prop, falls back to schema x-permissions, defaults to enabled
+  const canCreate = useMemo(() => {
+    if (!enableCreate) return false;
+    {{#if @def.x-permissions.role}}
+    // Schema-defined required roles: {{#each @def.x-permissions.role}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+    const schemaRoles: UserRole[] = [{{#each @def.x-permissions.role}}'{{this}}' as UserRole{{#unless @last}}, {{/unless}}{{/each}}];
+    const effectiveRoles = requiredRolesForCreate || schemaRoles;
+    {{else}}
+    const effectiveRoles = requiredRolesForCreate;
+    {{/if}}
+    if (effectiveRoles && effectiveRoles.length > 0) {
+      return hasAnyRole(effectiveRoles);
+    }
+    return true;
+  }, [enableCreate, requiredRolesForCreate, hasAnyRole]);
+
+  const canEdit = useMemo(() => {
+    if (!enableEdit) return false;
+    {{#if @def.x-permissions.role}}
+    // Schema-defined required roles: {{#each @def.x-permissions.role}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+    const schemaRoles: UserRole[] = [{{#each @def.x-permissions.role}}'{{this}}' as UserRole{{#unless @last}}, {{/unless}}{{/each}}];
+    const effectiveRoles = requiredRolesForEdit || schemaRoles;
+    {{else}}
+    const effectiveRoles = requiredRolesForEdit;
+    {{/if}}
+    if (effectiveRoles && effectiveRoles.length > 0) {
+      return hasAnyRole(effectiveRoles);
+    }
+    return true;
+  }, [enableEdit, requiredRolesForEdit, hasAnyRole]);
+
+  // State for dynamically generated columns
+  const [columns, setColumns] = useState<GenericGridColumn<{{@entityInterface}}>[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(true);
+
+  // State for loaded Zod schema (loaded asynchronously from registry)
+  const [loadedSchema, setLoadedSchema] = useState<z.ZodObject<any> | null>(null);
+
+  // Load schema asynchronously on mount
+  useEffect(() => {
+    const loadSchema = async () => {
+      try {
+        const schema = await getSchema('{{@entityInterface}}');
+        if (schema) {
+          setLoadedSchema(schema as z.ZodObject<any>);
+        }
+      } catch (error) {
+        console.warn('Failed to load schema for {{@entityInterface}}:', error);
+      }
+    };
+    loadSchema();
+  }, []);
+
+  // Default handler functions for CRUD operations with proper memoization
+  const handleCreate = useCallback(() => {
+    if (onCreateClick) {
+      onCreateClick();
+    } else if (useReactRouter) {
+      navigate('/v2/{{@entityNameSimple}}/Edit');
+    } else {
+      window.location.href = '/v2/{{@entityNameSimple}}/Edit';
+    }
+  }, [onCreateClick, useReactRouter, navigate]);
+
+  const handleEdit = useCallback((id: number) => {
+    if (onEditClick) {
+      onEditClick(id);
+    } else if (useReactRouter) {
+      navigate(`/v2/{{@entityNameSimple}}/Edit/${id}`);
+    } else {
+      window.location.href = `/v2/{{@entityNameSimple}}/Edit/${id}`;
+    }
+  }, [onEditClick, useReactRouter, navigate]);
+
+  const handleView = useCallback((id: number) => {
+    if (onViewClick) {
+      onViewClick(id);
+    } else if (useReactRouter) {
+      navigate(`/v2/{{@entityNameSimple}}/View/${id}`);
+    } else {
+      window.location.href = `/v2/{{@entityNameSimple}}/View/${id}`;
+    }
+  }, [onViewClick, useReactRouter, navigate]);
+
+  // Row click handler
+  const handleRowClick = useCallback((data: {{@entityInterface}}) => {
+    if (onRowClick) {
+      onRowClick(data);
+    }
+  }, [onRowClick]);
+
+  // Generate columns from schema with swagger metadata
+  useEffect(() => {
+    const generateColumns = async () => {
+      setColumnsLoading(true);
+      try {
+        const schemaColumns = await buildColumnsFromSchema<{{@entityInterface}}>(
+          '{{@entityInterface}}',
+          {
+            enableActions: true,
+            {{#if @def.x-read-only}}
+            onViewClick: handleView,
+            {{else}}
+            onEditClick: canEdit ? handleEdit : undefined,
+            onViewClick: onViewClick ? handleView : undefined,
+            {{/if}}
+            primaryKeyField: '{{@idProperty}}',
+            excludeFields: [
+              // Audit fields - automatically excluded
+              'createdOn', 'createdById', 'createdBy',
+              'updatedOn', 'updatedById', 'updatedBy',{{#each @def.properties as |prop propName|}}{{#if prop.x-hidden-column}}
+              '{{propName}}', // Hidden via x-hidden-column metadata{{/if}}{{/each}}
+              // Add more entity-specific exclusions here
+            ],
+            customColumns: {
+              // Entity-specific column customizations
+              // Note: Labels are automatically pulled from x-label metadata in schema
+              {{@idProperty}}: {
+                width: "80px",
+                body: (rowData: {{@entityInterface}}) => (
+                  <div className="text-sm text-muted-foreground">
+                    {ColumnRenderers.text(rowData.{{@idProperty}})}
+                  </div>
+                ),
+              },{{#if @valueProperty}}
+              {{@valueProperty}}: {
+                width: "250px",
+                body: (rowData: {{@entityInterface}}) => (
+                  <div className="font-medium">
+                    {ColumnRenderers.text(rowData.{{@valueProperty}})}
+                  </div>
+                ),
+              },{{/if}}{{#each @def.properties as |prop propName|}}{{#if prop.x-custom-renderer}}{{#if-any prop.x-custom-renderer "count"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}100px{{/if}}",
+                body: (rowData: {{@entityInterface}}) => (
+                  <div className="text-center">
+                    {ColumnRenderers.count(rowData.{{propName}})}
+                  </div>
+                ),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "status"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}100px{{/if}}",
+                body: (rowData: {{@entityInterface}}) => (
+                  ColumnRenderers.status(rowData.{{propName}})
+                ),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "code"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}120px{{/if}}",
+                body: (rowData: {{@entityInterface}}) => (
+                  <div className="font-mono text-sm">
+                    {ColumnRenderers.code(rowData.{{propName}})}
+                  </div>
+                ),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "email"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}200px{{/if}}",
+                body: (rowData: {{@entityInterface}}) =>
+                  ColumnRenderers.email(rowData.{{propName}} || ''),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "phone"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}150px{{/if}}",
+                body: (rowData: {{@entityInterface}}) =>
+                  ColumnRenderers.text(rowData.{{propName}}),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "date"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}140px{{/if}}",
+                body: (rowData: {{@entityInterface}}) =>
+                  ColumnRenderers.date(rowData.{{propName}}),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "boolean-tag"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}100px{{/if}}",
+                body: (rowData: {{@entityInterface}}) => (
+                  <Tag
+                    severity={rowData.{{propName}} ? "{{#if prop.x-tag-true-severity}}{{prop.x-tag-true-severity}}{{else}}success{{/if}}" : "{{#if prop.x-tag-false-severity}}{{prop.x-tag-false-severity}}{{else}}secondary{{/if}}"}
+                    value={rowData.{{propName}} ? "{{#if prop.x-tag-true-label}}{{prop.x-tag-true-label}}{{else}}Yes{{/if}}" : "{{#if prop.x-tag-false-label}}{{prop.x-tag-false-label}}{{else}}No{{/if}}"}
+                  />
+                ),
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "truncated-text"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}200px{{/if}}",
+                body: (rowData: {{@entityInterface}}) => {
+                  const text = rowData.{{propName}};
+                  if (!text) return "N/A";
+                  const maxLength = {{#if prop.x-truncate-length}}{{prop.x-truncate-length}}{{else}}50{{/if}};
+                  return (
+                    <span title={text}>
+                      {text.length > maxLength ? `${text.substring(0, maxLength)}...` : text}
+                    </span>
+                  );
+                },
+              },{{/if-any}}{{#if-any prop.x-custom-renderer "image"}}
+              {{propName}}: {
+                width: "{{#if prop.x-column-width}}{{prop.x-column-width}}{{else}}80px{{/if}}",
+                sortable: false,
+                filterable: false,
+                body: (rowData: {{@entityInterface}}) => {
+                  const imageSrc = rowData.{{propName}};
+                  return imageSrc ? (
+                    <img
+                      src={imageSrc}
+                      alt="{{propName}}"
+                      style=\{{
+                        width: "40px",
+                        height: "40px",
+                        objectFit: 'cover',
+                        borderRadius: '4px',
+                        border: '1px solid var(--surface-border)'
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="no-image flex align-items-center justify-content-center text-xs bg-gray-100 border-round"
+                      style=\{{ width: "40px", height: "40px" }}
+                    >
+                      N/A
+                    </div>
+                  );
+                },
+              },{{/if-any}}{{/if}}{{/each}}
+              // Note: Audit fields (isActive, createdOn, etc.) are automatically generated from schema
+              // Add additional entity-specific custom columns here as needed
+            },
+          }
+        );
+
+        setColumns(schemaColumns);
+      } catch (error) {
+        console.error('Failed to generate columns from schema:', error);
+        // Fallback: provide minimal columns
+        // Note: In production, schema should always be available
+        setColumns([
+          {
+            field: "{{@idProperty}}",
+            header: "{{@idProperty}}",  // Fallback uses field name
+            sortable: true,
+            filterable: true,
+            filterType: "number",
+            width: "80px",
+          },{{#if @valueProperty}}
+          {
+            field: "{{@valueProperty}}",
+            header: "{{@valueProperty}}",  // Fallback uses field name
+            sortable: true,
+            filterable: true,
+            filterType: "text",
+            width: "250px",
+          },{{/if}}
+          // Note: Additional fields (isActive, etc.) should be added based on schema if needed
+        ]);
+      } finally {
+        setColumnsLoading(false);
+      }
+    };
+
+    generateColumns();
+  }, [handleEdit, handleView, canEdit]);
+
+  // Filter columns based on visibleColumns prop if provided
+  const filteredColumns = useMemo(() => {
+    if (!visibleColumns || visibleColumns.length === 0) {
+      return columns;
+    }
+    return columns.filter(column => {
+      const columnId = String(column.field);
+      return visibleColumns.includes(columnId) || columnId === 'actions';
+    });
+  }, [columns, visibleColumns]);
+
+  // Entity-specific predefined filters
+  // Generated from schema x-predefined-filter metadata and x-combobox-variants
+  const predefinedFilters: PredefinedFilter<{{@entityInterface}}SearchQuery>[] = useMemo(() => [
+{{#if @def.x-combobox-variants}}
+    // Variant-based filters (from x-combobox-variants)
+{{#each @def.x-combobox-variants}}
+    {
+      id: 'variant-{{@key}}',
+      label: '{{this.label}}',
+      description: '{{this.label}}',
+      searchQuery: {
+        filter: {{#if this.filter}}{ {{#each this.filter}}'{{@key}}': { eq: {{#if-eq this true}}true{{else}}{{#if-eq this false}}false{{else}}{{this}}{{/if-eq}}{{/if-eq}} }{{#unless @last}}, {{/unless}}{{/each}} }{{else}}{}{{/if}}
+      }
+    },
+{{/each}}
+{{/if}}
+{{#each @def.properties as |prop propName|}}{{#if prop.x-predefined-filter}}
+    {
+      id: '{{propName}}-{{prop.x-predefined-filter}}',
+      label: '{{#if prop.x-predefined-filter-label}}{{prop.x-predefined-filter-label}}{{else}}{{propName}} Filter{{/if}}',
+      description: '{{#if prop.x-predefined-filter-description}}{{prop.x-predefined-filter-description}}{{else}}Filter by {{propName}}{{/if}}',
+      searchQuery: {
+        filter: {
+          {{propName}}: { {{prop.x-predefined-filter}}: {{#if prop.x-predefined-filter-value}}{{prop.x-predefined-filter-value}}{{else}}true{{/if}} }
+        }
+      }
+    },{{/if}}{{/each}}
+{{#if @def.properties.isActive}}{{#unless @def.x-combobox-variants}}
+    {
+      id: 'active-{{@entityNameSimple}}',
+      label: 'Active {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}',
+      description: 'Show only active items',
+      searchQuery: {
+        filter: {
+          isActive: { eq: true }
+        }
+      }
+    },
+    {
+      id: 'inactive-{{@entityNameSimple}}',
+      label: 'Inactive {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}',
+      description: 'Show only inactive items',
+      searchQuery: {
+        filter: {
+          isActive: { eq: false }
+        }
+      }
+    },
+{{/unless}}{{/if}}
+  ], []);
+
+  // Show loading state while columns are being generated
+  if (columnsLoading) {
+    return (
+      <div className="{{@entityNameSimple}}-data-loading p-4">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+            <p className="text-muted-foreground">Loading {{@entityNameSimple}} data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <SimpleGenericGrid<
+      {{@entityInterface}}Filter,
+      {{@entityInterface}}OrderBy,
+      {{@entityInterface}}SearchQuery,
+      {{@entityInterface}}
+    >
+      client={clientInstance}
+      title={title}
+      columns={filteredColumns}
+      predefinedFilters={predefinedFilters}
+      schema={loadedSchema}
+      pageSize={initialPageSize}
+      pageSizeOptions={[10, 20, 50]}
+      enableBulkSelection={enableBulkSelection}
+      enableColumnReordering={enableColumnReordering}
+      enableFiltering={enableFilter}
+      enableSorting={enableSort}
+      enableCreate={canCreate}
+      onBulkSelect={onBulkSelect}
+      onCreateClick={canCreate ? handleCreate : undefined}
+      onRowClick={onRowClick ? handleRowClick : undefined}
+      searchPlaceholder={searchPlaceholder}
+      height="calc(100vh - 200px)"
+      className={`${className} {{@entityNameSimple}}-grid-prime`}
+      dataKey="{{@idProperty}}"
+      gridInstance="{{@entityNameSimple}}-management"
+      entityType="{{@entityNameSimple}}"
+      {{#if @def.x-bulk-actions}}
+      bulkActions={[{{#each @def.x-bulk-actions as |action|}}'{{action}}',{{/each}}]}
+      bulkActionDisplayField="{{#if @valueProperty}}{{@valueProperty}}{{else}}{{@idProperty}}{{/if}}"
+      {{/if}}
+    />
+  );
+}
+
+export type { {{@entityNameSimple}}DataProps };

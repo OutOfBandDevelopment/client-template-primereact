@@ -1,0 +1,52 @@
+{{ import "_common/file_header.ts" }}
+{{#if @clientName}}
+import React, { useMemo } from 'react';
+import { EntityPage } from '@/components/ui/prime/EntityForm';
+import {{@clientName}} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+
+// Import Zod-inferred types and metadata from FormSchema
+import {
+  type {{@entityNameSimple}}Entity,
+  entityMeta,
+  defaultValues,
+} from '@/components/{{@namespace}}/{{@entityNameSimple}}/FormSchema';
+
+// Import entity-specific PropertyEditor (has external sync, field sets, etc.)
+import {{@entityNameSimple}}PropertyEditor from '@/components/{{@namespace}}/{{@entityNameSimple}}/PropertyEditor';
+
+/**
+ * {{@entityNameSimple}} Entity Page
+ *
+ * Handles create, edit, and view modes based on route:
+ * - /v2/{{@entityNameSimple}}/Edit/new → create mode
+ * - /v2/{{@entityNameSimple}}/Edit/:id → edit mode
+ * - /v2/{{@entityNameSimple}}/View/:id → view mode (read-only)
+ */
+export default function {{@entityNameSimple}}Edit() {
+  const client = useMemo(() => new {{@clientName}}(), []);
+
+  return (
+    <EntityPage<{{@entityNameSimple}}Entity>
+      client={client}
+      queryModelName={entityMeta.queryModel}
+      primaryKeyField={entityMeta.primaryKey}
+      entityLabel={entityMeta.label}
+      entityPath={entityMeta.routePath}
+      listPath={entityMeta.listPath}
+      defaultValues={defaultValues}
+      PropertyEditor={ {{@entityNameSimple}}PropertyEditor}
+    />
+  );
+}
+{{else}}
+// Edit page not generated - no client available for this entity
+// This entity is read-only and does not support create/edit operations
+export default function {{@entityNameSimple}}Edit() {
+  return (
+    <div className="p-4">
+      <h2>Not Available</h2>
+      <p>Editing is not supported for {{@entityLabel}}.</p>
+    </div>
+  );
+}
+{{/if}}

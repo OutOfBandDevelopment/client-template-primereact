@@ -1,0 +1,41 @@
+{{ import "_common/file_header.ts" }}
+
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { {{@entityNameSimple}}DataGrid } from '@/components/{{@namespace}}';
+
+/**
+ * {{@entityNameSimple}} List Page - {{@entityNameSimple}} Management with Full CRUD pattern
+ * Now using the reusable {{@entityNameSimple}}DataGrid component for consistency
+ * Supports URL hash-based filter loading (#filter=filterName)
+ */
+export default function {{@entityNameSimple}}List() {
+  const navigate = useNavigate();
+
+  const handleCreate = () => {
+    navigate('/v2/{{@entityNameSimple}}/Edit/new');
+  };
+
+  const handleEdit = (id: number) => {
+    navigate('/v2/{{@entityNameSimple}}/Edit/' + id);
+  };
+
+  const handleView = (id: number) => {
+    navigate('/v2/{{@entityNameSimple}}/View/' + id);
+  };
+
+  return (
+    <section className="manage-{{@entityNameSimple}}-page">
+      <div className="main_wrapper">
+        <{{@entityNameSimple}}DataGrid
+          title="{{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} Management"
+          createButtonText="Create {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}"
+          onCreateClick={handleCreate}
+          onEditClick={handleEdit}
+          onViewClick={handleView}
+          className="{{@entityNameSimple}}-grid"
+        />
+      </div>
+    </section>
+  );
+}

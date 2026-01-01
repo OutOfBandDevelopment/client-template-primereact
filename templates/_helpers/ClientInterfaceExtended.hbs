@@ -1,0 +1,51 @@
+
+{{~#if-jsonpath items "$.value.*.tags[?match(@, '^model-.*')]"}}
+    extends 
+{{#each items as |item key|}}
+{{#if-ends item.key "/Query"}}
+{{#with item.value.post as |operation|}}
+{{#with (lookup operation "x-query-set") as |querySet|}}
+{{#with (str-element querySet "." "@last") as |queryModel|}}
+{{#with (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "$ref") as |requestRef| }}
+{{#with (str-element (str-element requestRef "/" "@last") "." "@last") as |requestModel|}}
+        IQueryable<I{{queryModel}}Filter, I{{queryModel}}OrderBy, I{{ requestModel }}, I{{queryModel}}>,
+{{/with}}
+{{/with}}
+{{/with}}
+{{/with}}
+{{/with}}
+{{/if-ends}}
+{{#if-ends item.key "/Get"}}
+{{#with item.value.get as |operation|}}
+{{#with (lookup operation "x-query-set") as |querySet|}}
+{{#with (str-element querySet "." "@last") as |queryModel|}}
+        IGettable<I{{queryModel}}>,
+{{/with}}
+{{/with}}
+{{/with}}
+{{/if-ends}}
+{{#if-ends item.key "/Save"}}
+{{#with item.value.post as |operation|}}
+{{#with (lookup operation "x-query-set") as |querySet|}}
+{{#with (str-element querySet "." "@last") as |queryModel|}}
+{{#with (lookup (lookup (lookup operation.requestBody.content "application/json") "schema") "$ref") as |requestRef| }}
+{{#with (str-element (str-element requestRef "/" "@last") "." "@last") as |requestModel|}}
+        ISaveable<I{{queryModel}}, I{{requestModel}}>,
+{{/with}}
+{{/with}}
+{{/with}}
+{{/with}}
+{{/with}}
+{{/if-ends}}
+{{#if-ends item.key "/Delete"}}
+{{#with item.value.delete as |operation|}}
+{{#with (lookup operation "x-query-set") as |querySet|}}
+{{#with (str-element querySet "." "@last") as |queryModel|}}
+        IDeleteable<I{{queryModel}}>,
+{{/with}}
+{{/with}}
+{{/with}}
+{{/if-ends}}
+{{/each}}
+        IGeneratedClient
+{{/if-jsonpath~}}

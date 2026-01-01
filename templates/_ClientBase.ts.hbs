@@ -1,0 +1,250 @@
+import GlobalState from './GlobalState';
+import { v4 as uuidv4 } from 'uuid';
+import { pca } from '@/providers/AuthProvider';
+import { InteractionRequiredAuthError } from '@azure/msal-browser';
+
+export abstract class ClientBase {
+    protected http: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> } = {
+        fetch: async (url: RequestInfo, init?: RequestInit) => {
+            // Use our enhanced fetch method with token refresh
+            const transformedOptions = await this.transformOptions(init || {});
+            return this.fetchWithTokenRefresh(url.toString(), transformedOptions);
+        }
+    };
+    
+    protected getBaseUrl(defaultUrl: string | undefined, baseUrl: string | undefined): string {
+        const globalApiUrl = GlobalState.getApiUrl();
+        const finalUrl = globalApiUrl || baseUrl || defaultUrl || "";
+        return finalUrl;
+    }
+
+    /**
+     * Protected fetch method that includes automatic token refresh on 401
+     * This should be used by generated clients instead of direct http.fetch calls
+     */
+    protected async fetch(url: string, options: RequestInit): Promise<Response> {
+        const transformedOptions = await this.transformOptions(options);
+        return this.fetchWithTokenRefresh(url, transformedOptions);
+    }
+
+    protected async transformOptions(options: RequestInit): Promise<RequestInit> {
+        const token = GlobalState.getJwtToken();
+        if (token) {
+            options.headers = {
+                ...options.headers,
+                "Authorization": `Bearer ${token}`
+            };
+        } 
+        
+        if (!options.headers) {
+            options.headers = {};
+        }
+        
+        const sessionId = GlobalState.getSessionId();
+        if (sessionId){
+            (options.headers as any)["X-Session-ID"]=sessionId;  
+        }
+        const correlationId = GlobalState.getCorrelationId();
+        if (correlationId){
+            (options.headers as any)["X-Correlation-ID"]=correlationId;  
+        }
+        const eventType = GlobalState.getEventType();
+        if (eventType){
+            (options.headers as any)["X-Event-Type"]=eventType;  
+        }
+
+        // Add impersonation headers if they exist (with localStorage safety)
+        if (typeof localStorage !== 'undefined') {
+            const impersonateRoleId = localStorage.getItem('X-Impersonate-Role-ID');
+            if (impersonateRoleId) {
+                (options.headers as any)["X-Impersonate-Role-ID"] = impersonateRoleId;
+            }
+            const impersonateDistrictId = localStorage.getItem('X-Impersonate-District-ID');
+            if (impersonateDistrictId) {
+                (options.headers as any)["X-Impersonate-District-ID"] = impersonateDistrictId;
+            }
+            const impersonateCoopId = localStorage.getItem('X-Impersonate-Coop-ID');
+            if (impersonateCoopId) {
+                (options.headers as any)["X-Impersonate-Coop-ID"] = impersonateCoopId;
+            }
+            const impersonateManufacturerId = localStorage.getItem('X-Impersonate-Manufacturer-ID');
+            if (impersonateManufacturerId) {
+                (options.headers as any)["X-Impersonate-Manufacturer-ID"] = impersonateManufacturerId;
+            }
+        }
+
+        (options.headers as any)["X-Request-ID"]= uuidv4();  
+        return options;
+    }
+    
+    /**
+     * Refresh JWT token using MSAL silent token acquisition
+     */
+    protected async refreshToken(): Promise<string | null> {
+        try {
+            const accounts = pca.getAllAccounts();
+            if (accounts.length === 0) {
+                console.warn('⚠️ [ClientBase] No accounts found for token refresh');
+                return null;
+            }
+
+            const account = accounts[0];
+            
+            // Try silent token acquisition first
+            try {
+                const silentRequest = {
+                    account: account,
+                    scopes: ['openid', 'profile', 'email'],
+                    forceRefresh: true // Force refresh to get new token
+                };
+
+                const response = await pca.acquireTokenSilent(silentRequest);
+                
+                if (response?.idToken) {
+                    GlobalState.setJwtToken(response.idToken);
+                    localStorage.setItem('idToken', response.idToken);
+                    
+                    return response.idToken;
+                }
+            } catch (silentError) {
+                if (silentError instanceof InteractionRequiredAuthError) {
+                    const currentUrl = window.location.pathname + window.location.search;
+                    const logoutUrl = `/logout?url=${encodeURIComponent(currentUrl)}`;
+                    window.location.href = logoutUrl;
+                    return null;
+                } else {
+                    console.error('❌ [ClientBase] Silent token acquisition failed:', silentError);
+                    throw silentError;
+                }
+            }
+        } catch (error) {
+            console.error('❌ [ClientBase] Token refresh failed:', error);
+            return null;
+        }
+        
+        return null;
+    }
+
+    /**
+     * Enhanced fetch with automatic 401 handling and token refresh
+     */
+    protected async fetchWithTokenRefresh(url: string, options: RequestInit, retryCount: number = 0): Promise<Response> {
+        const maxRetries = 1; // Only retry once to avoid infinite loops
+        
+        try {
+            const response = await fetch(url, options);
+            
+            // Handle 401 unauthorized responses
+            if (response.status === 401 && retryCount < maxRetries) {
+                const newToken = await this.refreshToken();
+                if (newToken) {
+                    const updatedOptions = {
+                        ...options,
+                        headers: {
+                            ...options.headers,
+                            "Authorization": `Bearer ${newToken}`
+                        }
+                    };
+                    
+                    // Retry the original request with the new token
+                    return this.fetchWithTokenRefresh(url, updatedOptions, retryCount + 1);
+                } else {
+                    console.warn('⚠️ [ClientBase] Token refresh failed, redirecting to login...');
+                    const currentUrl = window.location.pathname + window.location.search;
+                    const logoutUrl = `/logout?url=${encodeURIComponent(currentUrl)}`;
+                    window.location.href = logoutUrl;
+                    throw new ApiException('Authentication failed', 401, 'Token refresh failed', {}, null);
+                }
+            }
+            
+            return response;
+        } catch (error) {
+            if (retryCount < maxRetries && (error as any)?.status === 401) {
+                // If the error is a 401 and we haven't retried yet, try token refresh
+                return this.fetchWithTokenRefresh(url, options, retryCount + 1);
+            }
+            throw error;
+        }
+    }
+
+    protected throwException(message: string, status: number, response: string, headers: { [key: string]: unknown; }, result?: unknown): never {
+        if (result !== null && result !== undefined)
+            throw result;
+        else
+            throw new ApiException(message, status, response, headers, null);
+    }
+}
+
+export class ApiException extends Error {
+    override message: string;
+    status: number;
+    response: string;
+    headers: { [key: string]: unknown; };
+    result: unknown;
+
+    constructor(message: string, status: number, response: string, headers: { [key: string]: unknown; }, result: unknown) {
+        super();
+
+        this.message = message;
+        this.status = status;
+        this.response = response;
+        this.headers = headers;
+        this.result = result;
+    }
+
+    protected isApiException = true;
+
+    static isApiException(obj: unknown): obj is ApiException {
+        return obj && (obj as any).isApiException && (obj as any).isApiException === true;
+    }
+}
+
+import type { IFilterParameter, IOrderDirections, IResultMessage } from './GreenOnion/Models';
+interface IQueryable<
+    TFilter extends IFilter,
+    TOrderBy extends IOrderBy,
+    TQuery  extends ISearch<TFilter, TOrderBy>,
+    TModel> {
+	Query(params: { body?: TQuery }) : Promise<IPagedResult<TModel> | undefined>;
+}
+interface  ISaveable<TModel, TSave> {
+	Save(params: { body?: TSave }) : Promise<TModel | undefined>
+}
+interface  IGettable<TModel> {
+	Get(params: Record<string, unknown>) : Promise<TModel | undefined>
+}
+interface  IDeleteable<TModel> {
+	Delete(params: Record<string, unknown>) : Promise<boolean | undefined>
+}
+interface IPagedResult<TModel> {
+    rows?: TModel[],
+    messages?: IResultMessage[],
+    currentPage?: number,
+    totalPageCount?: number,
+    totalRowCount?: number,
+}
+interface ISearch<TFilter extends IFilter, TOrderBy extends IOrderBy>
+{
+    currentPage?: number,
+    pageSize?: number,
+    excludePageCount?: boolean,
+    searchTerm?: string,
+    filter?: TFilter,
+    orderBy?: TOrderBy,
+}
+interface IFilter {
+    [key: string]: IFilterParameter;
+}
+interface IOrderBy {
+    [key: string]: IOrderDirections;
+}
+export type {
+    IQueryable,
+    ISaveable,
+    IGettable,
+    IDeleteable,
+    IPagedResult,
+    ISearch,
+    IFilter,
+    IOrderBy
+}

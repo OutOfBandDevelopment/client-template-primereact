@@ -1,0 +1,23 @@
+
+    /**
+{{#with operation.summary}}
+    * {{this}}
+{{/with}}    
+{{#with operation.description}}
+    * @description {{this}}
+{{/with}}  
+    * @operationId {{operation.operationId}}
+{{#each operation.tags as |tag|}}
+    * @tag {{tag}}
+{{/each}}
+    * @path {{operationUrl}} 
+{{#with (lookup this "x-permissions")}}
+    * @anonymous {{this.anonymous}}
+    {{#each this.role as |role|}}
+    * @role {{role}}
+    {{/each}}
+{{/with}}  
+{{#with (lookup this "x-query-set")}}
+    * @querySet {{this}}
+{{/with}} 
+    */

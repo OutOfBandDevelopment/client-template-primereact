@@ -1,0 +1,9 @@
+{{~#each @def.properties as |propertyDefinition propertyName|~}}
+    {{~#each propertyDefinition as | value name | ~}}
+        {{~ #if-any name @targetProperty}}
+            {{~ #if-any value "true"}}
+                {{~ propertyName ~}}
+            {{~/if-any~}}
+        {{~/if-any~}}
+    {{~/each~}}
+{{~/each~}}

@@ -1,0 +1,89 @@
+{{ import "_common/file_header.ts" }}
+{{#if @clientName}}
+import React from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { BaseEntityForm } from '@/components/ui/prime/EntityForm';
+import type { EntityFormMode } from '@/components/ui/prime/EntityForm';
+import {{@clientName}} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+import {{@entityNameSimple}}PropertyEditor from './PropertyEditor';
+
+// Import Zod-inferred types and metadata from FormSchema
+import {
+  type {{@entityNameSimple}}Entity,
+  entityMeta,
+  defaultValues,
+} from './FormSchema';
+
+/**
+ * Props for {{@entityNameSimple}}EntityForm
+ */
+export interface {{@entityNameSimple}}EntityFormProps {
+  /** Form mode: create, edit, or view (read-only) */
+  mode: EntityFormMode;
+  /** Entity ID for edit/view modes */
+  entityId?: number | string;
+  /** Callback when save succeeds */
+  onSaveSuccess?: (entity: {{@entityNameSimple}}Entity) => void;
+  /** Callback when user cancels */
+  onCancel?: () => void;
+  /** Custom title override */
+  title?: string;
+  /** Whether to show the header/title bar */
+  showHeader?: boolean;
+  /** Whether to show action buttons (Save/Cancel) */
+  showActions?: boolean;
+  /** Custom CSS class */
+  className?: string;
+  /** Use React Router navigation for cancel */
+  useReactRouter?: boolean;
+}
+
+// Instantiate client once
+const client = new {{@clientName}}();
+
+/**
+ * Entity form for {{@entityLabel}} - create, edit, and view operations
+ *
+ * Uses BaseEntityForm with entity-specific configuration.
+ * The PropertyEditor handles field rendering with Zod schema-based metadata.
+ */
+function {{@entityNameSimple}}EntityForm({
+  mode,
+  entityId,
+  onSaveSuccess,
+  onCancel,
+  title,
+  showHeader = true,
+  showActions = true,
+  className = '',
+  useReactRouter = true,
+}: {{@entityNameSimple}}EntityFormProps) {
+  return (
+    <BaseEntityForm<{{@entityNameSimple}}Entity>
+      mode={mode}
+      entityId={entityId}
+      client={client}
+      queryModelName={entityMeta.queryModel}
+      primaryKeyField={entityMeta.primaryKey}
+      entityLabel={entityMeta.label}
+      entityPath={entityMeta.routePath}
+      onSaveSuccess={onSaveSuccess}
+      onCancel={onCancel}
+      title={title}
+      showHeader={showHeader}
+      showActions={showActions}
+      className={className}
+      useReactRouter={useReactRouter}
+      defaultValues={defaultValues}
+      PropertyEditor={ {{@entityNameSimple}}PropertyEditor }
+    />
+  );
+}
+
+export default {{@entityNameSimple}}EntityForm;
+{{else}}
+// EntityForm not generated - no client available for this entity
+// This entity is read-only or does not support create/edit operations
+export {};
+{{/if}}

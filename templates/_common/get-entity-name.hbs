@@ -1,0 +1,5 @@
+{{~#each @body.tags as |tag index|~}}
+    {{~#if-any index "0"~}}
+        {{~tag~}}Client
+    {{~/if-any~}}
+{{~/each~}}

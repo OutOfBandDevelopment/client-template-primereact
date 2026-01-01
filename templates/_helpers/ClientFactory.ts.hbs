@@ -1,0 +1,26 @@
+{{ import "_common/file_header.ts" }}
+
+// Clients
+{{#group-by paths "$.*.tags[0]"}}
+import { default as {{key}}Client } from "./{{key}}Client";  {{call template="api/GreenOnion/Clients/{Entity}Client.ts" name=(concat "api/GreenOnion/Clients/" key "Client") node=@this}}
+{{/group-by}}
+
+import type {
+{{#group-by paths "$.*.tags[0]"}}
+    I{{key}}Client,
+{{/group-by}}
+} from '../'
+
+interface IClientFactory {
+    Create<TClient>(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) : TClient;
+}
+
+public class ClientFactory implements IClientFactory {
+    Create<TClient>(baseUrl?: string, http?: { fetch(url: RequestInfo, init?: RequestInit): Promise<Response> }) : TClient
+    {
+        
+    }
+}
+
+export default type IClientFactory;
+export default ClientFactory;

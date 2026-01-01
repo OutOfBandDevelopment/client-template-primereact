@@ -1,0 +1,748 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useState, useCallback, useMemo, Suspense } from 'react';
+import { InputText } from 'primereact/inputtext';
+import { InputNumber } from 'primereact/inputnumber';
+import { InputTextarea } from 'primereact/inputtextarea';
+import { Checkbox } from 'primereact/checkbox';
+import { Dropdown } from 'primereact/dropdown';
+import { Calendar } from 'primereact/calendar';
+import { Panel } from 'primereact/panel';
+import { Skeleton } from 'primereact/skeleton';
+import { Tooltip } from 'primereact/tooltip';
+import { classNames } from 'primereact/utils';
+import { z } from 'zod';
+
+import { getComboboxComponent } from '@/components/{{@namespace}}/componentRegistry';
+import { extractZodFields, type ZodFieldInfo } from '@/utils/zodSchemaHelper';
+
+// Import Zod schema directly
+import Z{{@entityNameSimple}} from '@/api/{{@namespace}}/Schema/Z{{@entityNameSimple}}';
+
+// Import external sync configuration
+import { externalSync, hasExternalSync, fields as formSchemaFields } from './FormSchema';
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export type PropertyEditorMode = 'create' | 'edit' | 'view';
+
+/** Inferred entity type from Zod schema */
+export type {{@entityNameSimple}}Entity = z.infer<typeof Z{{@entityNameSimple}}>;
+
+export interface {{@entityNameSimple}}PropertyEditorProps {
+  /** The entity data to display/edit */
+  formData: Partial<{{@entityNameSimple}}Entity>;
+  /** Callback when a field value changes */
+  onChange: <K extends keyof {{@entityNameSimple}}Entity>(field: K, value: {{@entityNameSimple}}Entity[K]) => void;
+  /** Edit mode: create, edit, or view (read-only) */
+  mode?: PropertyEditorMode;
+  /** Loading state */
+  loading?: boolean;
+  /** Disable all inputs */
+  disabled?: boolean;
+  /** Additional CSS class */
+  className?: string;
+  /** Override editable fields (by default uses schema metadata) */
+  editableFieldsOverride?: Set<string>;
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+/** Default fieldset name when x-field-set is not specified */
+const DEFAULT_FIELDSET = 'Details';
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Check if a metadata value is truthy (handles boolean and string 'true'/'True')
+ */
+function isMetadataTrue(value: any): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return false;
+}
+
+/**
+ * Format a field name for display (camelCase -> Title Case)
+ */
+function formatFieldName(fieldName: string): string {
+  return fieldName
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\b(Id|Url|Api|Ui|Db)\b/gi, match => match.toUpperCase());
+}
+
+/**
+ * Get field label from metadata or format field name
+ */
+function getFieldLabel(field: ZodFieldInfo): string {
+  return field.metadata['x-label'] || field.metadata['x-navigation-description'] || formatFieldName(field.name);
+}
+
+/**
+ * Get fieldset name from metadata, defaulting to DEFAULT_FIELDSET
+ */
+function getFieldSet(field: ZodFieldInfo): string {
+  return field.metadata['x-field-set'] || DEFAULT_FIELDSET;
+}
+
+/**
+ * Check if field is required (has minLength or is not optional/nullable)
+ */
+function isFieldRequired(field: ZodFieldInfo): boolean {
+  if (field.metadata['minLength'] && field.metadata['minLength'] > 0) return true;
+  return !field.isOptional && !field.isNullable;
+}
+
+/**
+ * Get the field type for rendering
+ */
+function getFieldRenderType(field: ZodFieldInfo): 'text' | 'textarea' | 'number' | 'boolean' | 'date' | 'datetime' | 'combobox' | 'readonly' {
+  // Navigation target fields are comboboxes
+  if (field.metadata['x-navigation-target']) {
+    return 'combobox';
+  }
+
+  // Navigation relation fields are readonly (display text for FK)
+  if (field.metadata['x-navigation-relation']) {
+    return 'readonly';
+  }
+
+  // Read-only fields
+  if (isMetadataTrue(field.metadata['readOnly'])) {
+    return 'readonly';
+  }
+
+  // Check format first
+  const format = field.metadata['format'];
+  if (format === 'date-time') return 'datetime';
+  if (format === 'date') return 'date';
+
+  // Check base type
+  switch (field.type) {
+    case 'boolean':
+      return 'boolean';
+    case 'number':
+      return 'number';
+    case 'string':
+      // Large text fields use textarea
+      const maxLength = field.metadata['maxLength'];
+      if (maxLength && maxLength > 255) return 'textarea';
+      return 'text';
+    default:
+      return 'text';
+  }
+}
+
+// =============================================================================
+// Component
+// =============================================================================
+
+/**
+ * {{@entityNameSimple}}PropertyEditor - Form editor using Zod schema metadata
+ *
+ * Fields are automatically grouped by x-field-set metadata.
+ * Fields without x-field-set are placed in the "Details" fieldset.
+ */
+function {{@entityNameSimple}}PropertyEditor({
+  formData,
+  onChange,
+  mode = 'edit',
+  loading = false,
+  disabled = false,
+  className = '',
+  editableFieldsOverride,
+}: {{@entityNameSimple}}PropertyEditorProps) {
+  const isViewMode = mode === 'view';
+
+  // Extract field info from Zod schema at runtime
+  const schemaFields = useMemo(() => {
+    return extractZodFields(Z{{@entityNameSimple}});
+  }, []);
+
+  interface ExtendedFieldInfo extends ZodFieldInfo {
+    parentPath?: string;
+    fullPath: string;
+  }
+
+  // Group fields by fieldset, expanding nested object fields
+  const { fieldsByFieldSet, fieldSetOrder } = useMemo(() => {
+    const groups: Record<string, ExtendedFieldInfo[]> = {};
+
+    const addToGroup = (field: ZodFieldInfo, fieldSetName: string, parentPath?: string) => {
+      const extendedField: ExtendedFieldInfo = {
+        ...field,
+        parentPath,
+        fullPath: parentPath ? `${parentPath}.${field.name}` : field.name,
+      };
+
+      if (!groups[fieldSetName]) {
+        groups[fieldSetName] = [];
+      }
+      groups[fieldSetName].push(extendedField);
+    };
+
+    for (const field of schemaFields) {
+      // Skip hidden fields
+      if (isMetadataTrue(field.metadata['x-hidden']) || isMetadataTrue(field.metadata['x-hidden-field'])) {
+        continue;
+      }
+
+      // Skip navigation relation fields (they're display-only text for FKs)
+      if (field.metadata['x-navigation-relation']) {
+        continue;
+      }
+
+      // Handle nested object fields - expand into their own fieldset
+      if (field.type === 'object' && field.nestedFields && field.nestedFields.length > 0) {
+        // Determine fieldset name: use x-field-set from parent if present, otherwise format the field name
+        const nestedFieldSetName = field.metadata['x-field-set'] as string || formatFieldName(field.name);
+
+        // Add each nested field to the nested fieldset
+        for (const nestedField of field.nestedFields) {
+          // Skip hidden nested fields
+          if (isMetadataTrue(nestedField.metadata['x-hidden']) || isMetadataTrue(nestedField.metadata['x-hidden-field'])) {
+            continue;
+          }
+          addToGroup(nestedField, nestedFieldSetName, field.name);
+        }
+        continue;
+      }
+
+      // Regular field - add to its fieldset
+      const fieldSet = getFieldSet(field);
+      addToGroup(field, fieldSet);
+    }
+
+    // Order: Details first, then alphabetically
+    const order = Object.keys(groups).sort((a, b) => {
+      if (a === DEFAULT_FIELDSET) return -1;
+      if (b === DEFAULT_FIELDSET) return 1;
+      return a.localeCompare(b);
+    });
+
+    return { fieldsByFieldSet: groups, fieldSetOrder: order };
+  }, [schemaFields]);
+
+  // Build navigation target to relation mapping for view mode
+  const navigationTargetToRelation = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const field of schemaFields) {
+      if (field.metadata['x-navigation-relation']) {
+        const relationField = field.metadata['x-navigation-relation'];
+        map[relationField] = field.name;
+      }
+    }
+    return map;
+  }, [schemaFields]);
+
+  // Panel collapse state (non-Details fieldsets start collapsed)
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    fieldSetOrder.forEach(name => {
+      if (name !== DEFAULT_FIELDSET) {
+        initial[name] = true;
+      }
+    });
+    return initial;
+  });
+
+  const togglePanel = useCallback((panelName: string) => {
+    setCollapsedPanels(prev => ({
+      ...prev,
+      [panelName]: !prev[panelName]
+    }));
+  }, []);
+
+  // Compute conditionally readonly fields based on external sync state
+  // Uses schemaFields (from extractZodFields) which includes nested object fields
+  const conditionalReadonlyInfo = useMemo(() => {
+    const readonlyFields = new Set<string>();
+    const syncReasons: Record<string, string> = {};
+
+    if (!hasExternalSync || !formData) {
+      return { readonlyFields, syncReasons };
+    }
+
+    // Helper to recursively check fields and their nested fields
+    const checkField = (field: ZodFieldInfo, parentPath: string, sourceName: string, reason: string) => {
+      const fieldPath = parentPath ? `${parentPath}.${field.name}` : field.name;
+      const syncedFrom = field.metadata?.['x-synced-from'];
+
+      if (syncedFrom === sourceName) {
+        readonlyFields.add(fieldPath);
+        syncReasons[fieldPath] = reason;
+      }
+
+      // Check nested fields (for object types like nutritionalInformation)
+      if (field.nestedFields && field.nestedFields.length > 0) {
+        for (const nestedField of field.nestedFields) {
+          checkField(nestedField, fieldPath, sourceName, reason);
+        }
+      }
+    };
+
+    for (const [sourceName, config] of Object.entries(externalSync)) {
+      const indicatorValue = formData[config.indicatorField as keyof {{@entityNameSimple}}Entity];
+
+      if (indicatorValue === true) {
+        const reason = config.readonlyReason || `Synced from ${sourceName}`;
+        // Find all fields synced from this source by checking Zod metadata
+        // This includes nested object fields (e.g., nutritionalInformation.calories)
+        for (const field of schemaFields) {
+          checkField(field, '', sourceName, reason);
+        }
+      }
+    }
+
+    return { readonlyFields, syncReasons };
+  }, [formData, schemaFields]);
+
+  /**
+   * Check if a field is conditionally readonly due to external sync
+   */
+  const isConditionallyReadonly = useCallback((fieldName: string): boolean => {
+    return conditionalReadonlyInfo.readonlyFields.has(fieldName);
+  }, [conditionalReadonlyInfo]);
+
+  /**
+   * Get the sync reason for a conditionally readonly field
+   */
+  const getSyncReason = useCallback((fieldName: string): string | undefined => {
+    return conditionalReadonlyInfo.syncReasons[fieldName];
+  }, [conditionalReadonlyInfo]);
+
+  /**
+   * Check if a field can be edited in the current context
+   */
+  const canEditField = useCallback((field: ZodFieldInfo): boolean => {
+    if (isViewMode) return false;
+    if (disabled) return false;
+    if (editableFieldsOverride) {
+      return editableFieldsOverride.has(field.name);
+    }
+    // Check conditional readonly (external sync)
+    if (isConditionallyReadonly(field.fullPath)) return false;
+    // Read-only fields from schema
+    if (isMetadataTrue(field.metadata['readOnly'])) return false;
+    // Primary key is always read-only
+    if (isMetadataTrue(field.metadata['x-navigation-key'])) return false;
+    return true;
+  }, [isViewMode, disabled, editableFieldsOverride, isConditionallyReadonly]);
+
+  // Loading skeleton
+  if (loading) {
+    return (
+      <div className={classNames('property-editor', className)}>
+        <div className="grid">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="col-12 md:col-6">
+              <div className="field">
+                <Skeleton width="30%" height="1rem" className="mb-2" />
+                <Skeleton width="100%" height="2.5rem" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // =============================================================================
+  // Helper Functions for Nested Fields
+  // =============================================================================
+
+  /**
+   * Render field label with optional sync indicator
+   */
+  const renderFieldLabel = (field: ExtendedFieldInfo, required: boolean, isDisabled: boolean) => {
+    const label = getFieldLabel(field);
+    const isSynced = isConditionallyReadonly(field.fullPath);
+    const syncReason = getSyncReason(field.name);
+
+    return (
+      <label htmlFor={field.fullPath} className="block text-900 font-medium mb-2">
+        {label}
+        {required && !isDisabled && <span className="text-red-500 ml-1">*</span>}
+        {isSynced && (
+          <>
+            <i
+              className={`synced-indicator-${field.name.replace(/\./g, '-')} pi pi-cloud text-blue-500 ml-2`}
+              style=\{{ fontSize: '0.875rem' }}
+            />
+            <Tooltip
+              target={`.synced-indicator-${field.name.replace(/\./g, '-')}`}
+              position="top"
+              content={syncReason}
+            />
+          </>
+        )}
+      </label>
+    );
+  };
+
+  const getNestedValue = (path: string): any => {
+    const parts = path.split('.');
+    let current: any = formData;
+    for (const part of parts) {
+      if (current === null || current === undefined) return undefined;
+      current = current[part];
+    }
+    return current;
+  };
+
+  const handleNestedChange = (field: ExtendedFieldInfo, newValue: any) => {
+    if (field.parentPath) {
+      const parentObj = (formData as any)[field.parentPath] || {};
+      const updatedParent = { ...parentObj, [field.name]: newValue };
+      onChange(field.parentPath as keyof {{@entityNameSimple}}Entity, updatedParent as any);
+    } else {
+      onChange(field.name as keyof {{@entityNameSimple}}Entity, newValue as any);
+    }
+  };
+
+  // =============================================================================
+  // Render Functions
+  // =============================================================================
+
+  const renderTextField = (field: ExtendedFieldInfo) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const required = isFieldRequired(field);
+    const maxLength = field.metadata['maxLength'];
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, required, isDisabled)}
+        <InputText
+          id={field.fullPath}
+          value={String(value ?? '')}
+          onChange={(e) => handleNestedChange(field, e.target.value)}
+          disabled={isDisabled}
+          maxLength={maxLength}
+          className={classNames('w-full', { 'p-disabled': isDisabled })}
+        />
+      </div>
+    );
+  };
+
+  const renderTextareaField = (field: ExtendedFieldInfo) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const required = isFieldRequired(field);
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, required, isDisabled)}
+        <InputTextarea
+          id={field.fullPath}
+          value={String(value ?? '')}
+          onChange={(e) => handleNestedChange(field, e.target.value)}
+          disabled={isDisabled}
+          rows={4}
+          autoResize
+          className={classNames('w-full', { 'p-disabled': isDisabled })}
+        />
+      </div>
+    );
+  };
+
+  const renderNumberField = (field: ExtendedFieldInfo) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const required = isFieldRequired(field);
+    const min = field.metadata['minimum'];
+    const max = field.metadata['maximum'];
+    const format = field.metadata['format'];
+    const isInteger = format === 'int32' || format === 'int64';
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, required, isDisabled)}
+        <InputNumber
+          id={field.fullPath}
+          value={value as number | null}
+          onValueChange={(e) => handleNestedChange(field, e.value)}
+          disabled={isDisabled}
+          min={min}
+          max={max}
+          mode={isInteger ? undefined : 'decimal'}
+          minFractionDigits={isInteger ? 0 : undefined}
+          maxFractionDigits={isInteger ? 0 : 2}
+          className="w-full"
+          inputClassName={classNames({ 'p-disabled': isDisabled })}
+        />
+      </div>
+    );
+  };
+
+  const renderBooleanField = (field: ExtendedFieldInfo) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const label = getFieldLabel(field);
+    const isSynced = isConditionallyReadonly(field.fullPath);
+    const syncReason = getSyncReason(field.name);
+
+    // Nullable booleans use dropdown, non-nullable use checkbox
+    if (field.isNullable || field.isOptional) {
+      const booleanOptions = [
+        { label: '-- Select --', value: 'null' },
+        { label: 'Yes', value: 'true' },
+        { label: 'No', value: 'false' },
+      ];
+
+      const dropdownValue = value === true ? 'true' : value === false ? 'false' : 'null';
+
+      return (
+        <div className="field" key={field.fullPath}>
+          {renderFieldLabel(field, false, isDisabled)}
+          <Dropdown
+            id={field.fullPath}
+            value={dropdownValue}
+            options={booleanOptions}
+            onChange={(e) => {
+              const newValue = e.value === 'true' ? true : e.value === 'false' ? false : null;
+              handleNestedChange(field, newValue);
+            }}
+            disabled={isDisabled}
+            placeholder="-- Select --"
+            className="w-full"
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className="field" key={field.fullPath}>
+        <div className="flex align-items-center h-full pt-4">
+          <Checkbox
+            inputId={field.fullPath}
+            checked={Boolean(value)}
+            onChange={(e) => handleNestedChange(field, e.checked)}
+            disabled={isDisabled}
+          />
+          <label htmlFor={field.fullPath} className="ml-2 text-900">
+            {label}
+            {isSynced && (
+              <>
+                <i
+                  className={`synced-indicator-${field.name.replace(/\./g, '-')} pi pi-cloud text-blue-500 ml-2`}
+                  style=\{{ fontSize: '0.875rem' }}
+                />
+                <Tooltip
+                  target={`.synced-indicator-${field.name.replace(/\./g, '-')}`}
+                  position="top"
+                  content={syncReason}
+                />
+              </>
+            )}
+          </label>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDateField = (field: ExtendedFieldInfo, showTime: boolean) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const required = isFieldRequired(field);
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, required, isDisabled)}
+        <Calendar
+          id={field.fullPath}
+          value={value ? new Date(value as string) : null}
+          onChange={(e) => handleNestedChange(field, e.value)}
+          disabled={isDisabled}
+          dateFormat="mm/dd/yy"
+          showTime={showTime}
+          hourFormat="12"
+          showIcon
+          className="w-full"
+          inputClassName={classNames({ 'p-disabled': isDisabled })}
+        />
+      </div>
+    );
+  };
+
+  const renderReadOnlyField = (field: ExtendedFieldInfo) => {
+    const value = getNestedValue(field.fullPath);
+    const format = field.metadata['format'];
+    const isSynced = isConditionallyReadonly(field.fullPath);
+    const syncReason = getSyncReason(field.name);
+
+    let displayValue = 'N/A';
+    if (value !== null && value !== undefined) {
+      if (format === 'date-time') {
+        displayValue = new Date(value as string).toLocaleString();
+      } else if (format === 'date') {
+        displayValue = new Date(value as string).toLocaleDateString();
+      } else if (typeof value === 'boolean') {
+        displayValue = value ? 'Yes' : 'No';
+      } else {
+        displayValue = String(value);
+      }
+    }
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, false, true)}
+        <InputText
+          id={field.fullPath}
+          value={displayValue}
+          disabled
+          className="w-full"
+        />
+      </div>
+    );
+  };
+
+  const renderComboboxField = (field: ExtendedFieldInfo) => {
+    const isDisabled = !canEditField(field);
+    const value = getNestedValue(field.fullPath);
+    const label = getFieldLabel(field);
+    const required = isFieldRequired(field);
+    const navigationTarget = field.metadata['x-navigation-target'];
+    const navigationVariant = field.metadata['x-navigation-variant'];
+
+    // In view mode, show the display text from the relation field
+    if (isViewMode) {
+      const displayFieldName = navigationTargetToRelation[field.name];
+      if (displayFieldName) {
+        const displayValue = formData[displayFieldName as keyof {{@entityNameSimple}}Entity];
+        return (
+          <div className="field" key={field.fullPath}>
+            {renderFieldLabel(field, false, true)}
+            <InputText
+              id={field.fullPath}
+              value={String(displayValue ?? 'N/A')}
+              disabled
+              className="w-full"
+            />
+          </div>
+        );
+      }
+    }
+
+    const ComboBoxComponent = getComboboxComponent(navigationTarget);
+
+    if (!ComboBoxComponent) {
+      // Fallback to number input if no component found
+      return renderNumberField(field);
+    }
+
+    return (
+      <div className="field" key={field.fullPath}>
+        {renderFieldLabel(field, required, isDisabled)}
+        <Suspense fallback={<Skeleton height="2.5rem" className="w-full" />}>
+          <ComboBoxComponent
+            value={value}
+            onChange={(newValue: any) => handleNestedChange(field, newValue)}
+            disabled={isDisabled}
+            placeholder={`Select ${label}...`}
+            className="w-full"
+            {...(navigationVariant ? { variant: navigationVariant } : {})}
+          />
+        </Suspense>
+      </div>
+    );
+  };
+
+  // =============================================================================
+  // Main Field Renderer
+  // =============================================================================
+
+  const renderField = (field: ExtendedFieldInfo): React.ReactNode => {
+    const renderType = getFieldRenderType(field);
+
+    switch (renderType) {
+      case 'readonly':
+        return renderReadOnlyField(field);
+      case 'text':
+        return renderTextField(field);
+      case 'textarea':
+        return renderTextareaField(field);
+      case 'number':
+        return renderNumberField(field);
+      case 'boolean':
+        return renderBooleanField(field);
+      case 'date':
+        return renderDateField(field, false);
+      case 'datetime':
+        return renderDateField(field, true);
+      case 'combobox':
+        return renderComboboxField(field);
+      default:
+        return renderTextField(field);
+    }
+  };
+
+  const getFieldColumnClass = (field: ExtendedFieldInfo): string => {
+    const maxLength = field.metadata['maxLength'];
+    if (maxLength && maxLength > 255) {
+      return 'col-12';
+    }
+    return 'col-12 md:col-6';
+  };
+
+  // =============================================================================
+  // Render JSX
+  // =============================================================================
+
+  return (
+    <div className={classNames('property-editor', className)}>
+      {fieldSetOrder.map((fieldSetName, index) => {
+        const fields = fieldsByFieldSet[fieldSetName] || [];
+        if (fields.length === 0) return null;
+
+        // First fieldset (Details) renders without Panel wrapper
+        if (index === 0 && fieldSetName === DEFAULT_FIELDSET) {
+          return (
+            <div key={fieldSetName} className="grid">
+              {fields.map(field => (
+                <div key={field.fullPath} className={getFieldColumnClass(field)}>
+                  {renderField(field)}
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        // Other fieldsets render in collapsible Panels
+        return (
+          <Panel
+            key={fieldSetName}
+            header={<span className="font-semibold text-900">{fieldSetName}</span>}
+            toggleable
+            collapsed={collapsedPanels[fieldSetName] ?? true}
+            onToggle={() => togglePanel(fieldSetName)}
+            className="mb-3 mt-3"
+            pt=\{{
+              header: { className: 'bg-surface-50' },
+              content: { className: 'pt-3' }
+            }}
+          >
+            <div className="grid">
+              {fields.map(field => (
+                <div key={field.fullPath} className={getFieldColumnClass(field)}>
+                  {renderField(field)}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        );
+      })}
+    </div>
+  );
+}
+
+export default {{@entityNameSimple}}PropertyEditor;

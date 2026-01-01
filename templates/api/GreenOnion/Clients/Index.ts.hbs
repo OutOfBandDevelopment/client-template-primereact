@@ -1,0 +1,16 @@
+{{ import "_common/file_header.ts" }}
+{{!-- {{call template="../../../_helpers/ClientFactory.ts" name="api/GreenOnion/Clients/ClientFactory" node=@this}} --}}
+{{!-- {{call template="../../../_helpers/ClientBase.ts" name="api/_ClientBase" node=@this}} --}}
+export { ApiException } from "../../_ClientBase";
+
+// Clients
+{{#group-by paths "$.*.tags[0]"}}
+export { default as {{key}}Client } from "./{{key}}Client";  
+    {{~call template="api/GreenOnion/Clients/{Entity}Client.ts" name=(concat "api/GreenOnion/Clients/" key "Client") node=@this}}
+{{/group-by}}
+
+export type {
+{{#group-by paths "$.*.tags[0]"}}
+    I{{key}}Client,
+{{/group-by}}
+} from '../'

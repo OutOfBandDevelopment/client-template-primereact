@@ -1,0 +1,353 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useCallback, useMemo } from 'react';
+import { MultiSelect } from 'primereact/multiselect';
+import type { MultiSelectProps } from 'primereact/multiselect';
+import { Controller } from 'react-hook-form';
+import type { Control, FieldValues, RegisterOptions, UseFormSetValue } from 'react-hook-form';
+import { useCachedApiCall } from '@/hooks/useCachedApiCall';
+import { CacheKeys } from '@/utils/masterDataCache';
+import { getSchema } from '@/api/{{@namespace}}/Schema/Registry';
+import type { z } from 'zod';
+import { QueryCacheKeys } from '../';
+import type { IMultiSelectEntityProps, IMultiSelectEntityOption } from '../IMultiSelectEntityProps';
+
+import {{@clientName}} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+import type {
+  {{@entityInterface}},
+  {{@entityInterface}}SearchQuery,
+  {{@entityInterface}}OrderBy,
+  {{@entityInterface}}Filter,
+  IFilterParameter,
+} from '@/api/{{@namespace}}/Clients/{{@clientName}}';
+{{#if @def.x-combobox-variants}}
+
+// Available variants for this multiselect
+export type {{@entityNameSimple}}MultiSelectVariant = {{#each @def.x-combobox-variants}}'{{@key}}'{{#unless @last}} | {{/unless}}{{/each}};
+
+// Variant filter configurations
+const variantFilters: Record<{{@entityNameSimple}}MultiSelectVariant, Record<string, any> | null> = {
+{{#each @def.x-combobox-variants}}
+  '{{@key}}': {{#if this.filter}}{ {{#each this.filter}}'{{@key}}': { eq: {{#if-eq this true}}true{{else}}{{#if-eq this false}}false{{else}}{{this}}{{/if-eq}}{{/if-eq}} }{{#unless @last}}, {{/unless}}{{/each}} }{{else}}null{{/if}},
+{{/each}}
+};
+
+// Variant labels for display
+export const variantLabels: Record<{{@entityNameSimple}}MultiSelectVariant, string> = {
+{{#each @def.x-combobox-variants}}
+  '{{@key}}': '{{this.label}}',
+{{/each}}
+};
+{{/if}}
+
+/*
+{{@entityNameSimple}}MultiSelect
+
+## Action
+{{import template="_common/action-definition" 
+         request=request 
+         uri=uri 
+         }}
+## Entity
+{{import template="_common/entity-definition"
+         name=@entityNameFull
+         def=entityDefinition 
+         }}
+## Values
+httpMethod: {{@httpMethod}}
+entityName-full: {{@entityNameFull}} 
+entityName: {{@entityNameSimple}}    
+entityInterface: {{@entityInterface}}           
+query-set: {{requestBody.x-query-set}}
+query-action: {{requestBody.x-query-action}}
+uri: {{@uri}}
+typeName: {{@typeName}}
+idProperty: {{@idProperty}}
+valueProperty: {{@valueProperty}}
+cacheKey: {{@cacheKey}}
+  
+{{!--  
+    body: {{@body}}
+    request: {{@request}}
+    entityDefinition: {{entityDefinition}}
+--}}         
+*/
+
+{{#if @def.x-combobox-variants}}
+interface {{@entityNameSimple}}MultiSelectPropsWithVariant<TFormValues extends FieldValues = FieldValues>
+  extends IMultiSelectEntityProps<{{@entityInterface}}, TFormValues> {
+  /** Filter variant to apply */
+  variant?: {{@entityNameSimple}}MultiSelectVariant;
+  /** Maximum number of selected items to show */
+  maxSelectedLabels?: number;
+  /** Label template for when selection exceeds maxSelectedLabels */
+  selectedItemsLabel?: string;
+  /** Show select all checkbox */
+  showSelectAll?: boolean;
+  /** Filter field */
+  filterBy?: string;
+  /** Display mode */
+  display?: 'chip' | 'comma';
+  /** Panel class name */
+  panelClassName?: string;
+}
+{{/if}}
+
+function {{@entityNameSimple}}MultiSelect<TFormValues extends FieldValues = FieldValues>({
+  value,
+  onChange,
+  onEntityChange,
+  onTextChange,
+  placeholder = "Select {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}",
+  className = "form-multiselect",
+  disabled = false,
+  control,
+  setValue: setValueProp,
+  name = "{{@idProperty}}s",
+  entityName,
+  textName,
+  required = false,
+  rules,
+  onLoadError,
+  parentEntityId,
+  parentEntityFieldName,
+  requireParent = false,
+  parentRequiredMessage = "Please select a parent first",
+  maxSelectedLabels = 3,
+  selectedItemsLabel = "{0} {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} selected",
+  showSelectAll = true,
+  filterBy = "label",
+  display = "chip" as const,
+  panelClassName = "{{@entityNameSimple}}-multiselect-panel",
+{{#if @def.x-combobox-variants}}
+  variant = 'all',
+{{/if}}
+  ...multiSelectProps
+}: {{#if @def.x-combobox-variants}}{{@entityNameSimple}}MultiSelectPropsWithVariant<TFormValues>{{else}}IMultiSelectEntityProps<{{@entityInterface}}, TFormValues> & {
+  /** Maximum number of selected items to show */
+  maxSelectedLabels?: number;
+  /** Label template for when selection exceeds maxSelectedLabels */
+  selectedItemsLabel?: string;
+  /** Show select all checkbox */
+  showSelectAll?: boolean;
+  /** Filter field */
+  filterBy?: string;
+  /** Display mode */
+  display?: 'chip' | 'comma';
+  /** Panel class name */
+  panelClassName?: string;
+}{{/if}}) {
+  // Helper to check if parent is valid
+  const isParentValid = !requireParent || (parentEntityId !== undefined && parentEntityId > 0);
+
+{{#if @def.x-combobox-variants}}
+  // Get the variant filter configuration
+  const variantFilter = useMemo(() => {
+    return variantFilters[variant] || null;
+  }, [variant]);
+{{/if}}
+
+  // Create cached API call function with proper filtering and sorting
+  const fetchItems = useCallback(async (): Promise<IMultiSelectEntityOption<{{@entityInterface}}>[]> => {
+    const client = new {{@clientName}}();
+
+    // Build filter with optional parent and variant filtering
+    const filter: {{@entityInterface}}Filter = {
+      isActive: { eq: true } as IFilterParameter,
+      ...(parentEntityId && parentEntityId > 0 && parentEntityFieldName
+        ? { [parentEntityFieldName]: { eq: parentEntityId } as IFilterParameter }
+        : {}),
+{{#if @def.x-combobox-variants}}
+      ...(variantFilter || {})
+{{/if}}
+    } as {{@entityInterface}}Filter;
+
+    const searchQuery: {{@entityInterface}}SearchQuery = {
+      currentPage: 0,
+      pageSize: 1000,
+      orderBy: {
+        {{~#if @valueProperty}}{{@valueProperty}}{{else}}{{@idProperty}}{{/if~}}: "asc"
+      } as {{@entityInterface}}OrderBy,
+      filter
+    };
+    
+    const res = await client.Query({
+      body: searchQuery
+    });
+
+    if (res && res.rows) {
+      const options: IMultiSelectEntityOption<{{@entityInterface}}>[] = res.rows
+        .filter((model: {{@entityInterface}}) => {
+          const id = model.{{@idProperty}};
+          return id !== null && id !== undefined && id !== 0;
+        })
+        .map((model: {{@entityInterface}}) => ({
+          value: model.{{@idProperty}} ?? 0,
+          label: model.{{~#if @valueProperty}}{{@valueProperty}}{{else}}{{@idProperty}}{{/if~}} ?? 'N/A',
+          entity: model
+        }));
+
+      return options;
+    }
+
+    return [];
+  }, [parentEntityId, parentEntityFieldName{{#if @def.x-combobox-variants}}, variantFilter{{/if}}]);
+
+  // Use cached API call hook with 30-minute TTL
+  // Cache key includes parent ID and variant for proper cache isolation
+  const cacheKey = useMemo(() => {
+    let key = QueryCacheKeys.{{@cacheKey}}();
+    if (parentEntityId && parentEntityId > 0) {
+      key += `_parent_${parentEntityId}`;
+    }
+{{#if @def.x-combobox-variants}}
+    if (variant && variant !== 'all') {
+      key += `_variant_${variant}`;
+    }
+{{/if}}
+    return key;
+  }, [parentEntityId{{#if @def.x-combobox-variants}}, variant{{/if}}]);
+
+  const {
+    data: items = [],
+    loading,
+    error
+  } = useCachedApiCall(
+    cacheKey,
+    fetchItems,
+    {
+      ttl: 30 * 60 * 1000, // Cache for 30 minutes
+      onError: (error) => {
+        console.error('Error loading:', error);
+        if (onLoadError) {
+          onLoadError(error instanceof Error ? error.message : 'Failed to load');
+        }
+      }
+    }
+  );
+
+  // Helper to get selected entities from values
+  const getSelectedEntities = (selectedValues: number[]): {{@entityInterface}}[] => {
+    return items
+      .filter(opt => selectedValues.includes(opt.value) && opt.entity)
+      .map(opt => opt.entity!);
+  };
+
+  // Helper to get selected texts from values
+  const getSelectedTexts = (selectedValues: number[]): string[] => {
+    return items
+      .filter(opt => selectedValues.includes(opt.value))
+      .map(opt => opt.label);
+  };
+
+  // If control is provided, use Controller for React Hook Form integration
+  if (control && name) {
+    return (
+      <Controller
+        name={name as any}
+        control={control}
+        rules={ {
+          required: required ? "At least one {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} is required" : false,
+          ...rules
+        } }
+        render={({ field }) => (
+          <MultiSelect
+            {...multiSelectProps}
+            value={field.value ?? []}
+            options={items}
+            onChange={(e) => {
+              const selectedValues: number[] = e.value ?? [];
+              const selectedEntities = getSelectedEntities(selectedValues);
+              const selectedTexts = getSelectedTexts(selectedValues);
+              
+              field.onChange(selectedValues);
+              
+              // Force form update for entity and text fields
+              setTimeout(() => {
+                if (setValueProp && typeof setValueProp === 'function') {
+                  if (entityName) {
+                    setValueProp(entityName as any, selectedEntities, { shouldTouch: true, shouldDirty: true });
+                  }
+                  
+                  if (textName) {
+                    setValueProp(textName as any, selectedTexts, { shouldTouch: true, shouldDirty: true });
+                  }
+                }
+              }, 0);
+              
+              // Call external handlers
+              if (onChange) onChange(selectedValues);
+              if (onEntityChange) onEntityChange(selectedEntities);
+              if (onTextChange) onTextChange(selectedTexts);
+            }}
+            optionLabel="label"
+            optionValue="value"
+            placeholder={loading ? 'Loading {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}...' : (!isParentValid ? parentRequiredMessage : placeholder)}
+            disabled={disabled || loading || !isParentValid}
+            className={className}
+            loading={loading}
+            filter
+            filterBy={filterBy}
+            filterPlaceholder="Search {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}..."
+            emptyMessage={!isParentValid ? parentRequiredMessage : "No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} found"}
+            emptyFilterMessage="No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} match the search"
+            maxSelectedLabels={maxSelectedLabels}
+            selectedItemsLabel={selectedItemsLabel}
+            showSelectAll={showSelectAll}
+            display={display}
+            showClear={!required}
+            selectAllLabel="(Select All)"
+            panelClassName={panelClassName}
+          />
+        )}
+      />
+    );
+  }
+
+  // Otherwise, render standalone multiselect
+  return (
+    <MultiSelect
+      {...multiSelectProps}
+      value={value ?? []}
+      options={items}
+      onChange={(e) => {
+        const selectedValues: number[] = e.value ?? [];
+        const selectedEntities = getSelectedEntities(selectedValues);
+        const selectedTexts = getSelectedTexts(selectedValues);
+
+        if (onChange) onChange(selectedValues);
+        if (onEntityChange) onEntityChange(selectedEntities);
+        if (onTextChange) onTextChange(selectedTexts);
+      }}
+      optionLabel="label"
+      optionValue="value"
+      placeholder={loading ? 'Loading {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}...' : (!isParentValid ? parentRequiredMessage : placeholder)}
+      disabled={disabled || loading || !isParentValid}
+      className={className}
+      loading={loading}
+      filter
+      filterBy={filterBy}
+      filterPlaceholder="Search {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}}..."
+      emptyMessage={!isParentValid ? parentRequiredMessage : "No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} found"}
+      emptyFilterMessage="No {{#if @def.x-label}}{{@def.x-label}}{{else}}{{@entityNameSimple}}{{/if}} match the search"
+      maxSelectedLabels={maxSelectedLabels}
+      selectedItemsLabel={selectedItemsLabel}
+      showSelectAll={showSelectAll}
+      display={display}
+      showClear={!required}
+      selectAllLabel="(Select All)"
+      panelClassName={panelClassName}
+    />
+  );
+}
+
+{{@entityNameSimple}}MultiSelect.zodSchema = async (): Promise<z.ZodSchema | null> => {
+  return await getSchema('{{@entityInterface}}');
+};
+
+export default {{@entityNameSimple}}MultiSelect;
+{{#if @def.x-combobox-variants}}
+export type { {{@entityNameSimple}}MultiSelectPropsWithVariant as {{@entityNameSimple}}MultiSelectProps };
+{{else}}
+export type { IMultiSelectEntityProps as {{@entityNameSimple}}MultiSelectProps };
+{{/if}}

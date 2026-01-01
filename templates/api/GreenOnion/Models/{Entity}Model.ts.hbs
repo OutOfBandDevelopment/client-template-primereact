@@ -1,0 +1,7 @@
+{{ import "_common/file_header.ts" }}
+import type { z } from "zod";
+
+import {{schema}} from "../Schema/{{schema}}";
+type {{interface}} = z.infer<typeof {{schema}}>;
+export type { {{interface}} };
+export { {{schema}} };

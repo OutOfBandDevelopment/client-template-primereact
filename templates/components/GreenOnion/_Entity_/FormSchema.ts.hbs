@@ -1,0 +1,343 @@
+{{ import "_common/file_header.ts" }}
+
+/**
+ * FormSchema for {{@entityLabel}}
+ *
+ * Pre-computed entity metadata and field definitions from Zod schema.
+ * Used by PropertyEditor and EntityForm components.
+ *
+ * Data Model:
+ * - QueryModel ({{@entityInterface}}) = read/display model from API
+ * - SaveModel ({{@saveModel.name}}) = write model for create/update operations
+ */
+
+import type { z } from 'zod';
+
+// Import the actual Zod schemas
+import Z{{@entityNameSimple}} from '@/api/{{@namespace}}/Schema/Z{{@entityNameSimple}}';
+{{#if @saveModel.name}}
+import Z{{@saveModel.name}} from '@/api/{{@namespace}}/Schema/Z{{@saveModel.name}}';
+{{/if}}
+
+// =============================================================================
+// Zod Schema Exports
+// =============================================================================
+
+/** Query model Zod schema (read model) */
+export const querySchema = Z{{@entityNameSimple}};
+
+/** Save model Zod schema (write model) */
+{{#if @saveModel.name}}
+export const saveSchema = Z{{@saveModel.name}};
+{{else}}
+export const saveSchema = null;
+{{/if}}
+
+/** Inferred TypeScript type from Query schema */
+export type {{@entityNameSimple}}Entity = z.infer<typeof querySchema>;
+
+{{#if @saveModel.name}}
+/** Inferred TypeScript type from Save schema */
+export type {{@entityNameSimple}}SaveEntity = z.infer<typeof saveSchema>;
+{{/if}}
+
+// =============================================================================
+// Entity Metadata (pre-computed from schema)
+// =============================================================================
+
+/** Entity metadata extracted from schema x-* extensions */
+export const entityMeta = {
+  /** Query model interface name */
+  queryModel: '{{@entityInterface}}',
+
+  /** Save model interface name */
+  saveModel: '{{#if @saveModel.name}}{{@saveModel.name}}{{else}}{{@entityInterface}}{{/if}}',
+
+  /** Entity display label (from x-label) */
+  label: '{{@entityLabel}}',
+
+  /** Plural form of label */
+  pluralLabel: '{{@entityLabel}}s',
+
+  /** Primary key field name */
+  primaryKey: '{{@idProperty}}',
+
+  /** Display value field (from x-display-value) */
+  displayField: '{{@valueProperty}}',
+
+  /** Route path for this entity */
+  routePath: '/v2/{{@entityNameSimple}}',
+
+  /** List page path */
+  listPath: '/v2/{{@entityNameSimple}}/List',
+
+  /** Entity is read-only (no edit/create) */
+  isReadOnly: {{#if @def.x-read-only}}true{{else}}false{{/if}},
+
+  /** Entity can be created */
+  isCreatable: {{#if @def.x-not-creatable}}false{{else}}true{{/if}},
+
+  /** Entity can be deleted */
+  isDeletable: {{#if @def.x-not-deletable}}false{{else}}true{{/if}},
+
+  /** Entity can be selected in combobox/multiselect */
+  isSelectable: {{#if @def.x-not-selectable}}false{{else}}true{{/if}},
+{{#if @def.x-combobox-variants}}
+
+  /** Combobox variants for filtered selection */
+  comboboxVariants: {
+{{#each @def.x-combobox-variants}}
+    '{{@key}}': {
+      label: '{{this.label}}',
+      filter: {{#if this.filter}}{ {{#each this.filter}}'{{@key}}': {{#if-eq this true}}true{{else}}{{#if-eq this false}}false{{else}}{{this}}{{/if-eq}}{{/if-eq}}{{#unless @last}}, {{/unless}}{{/each}} }{{else}}null{{/if}},
+    },
+{{/each}}
+  } as const,
+
+  /** Available variant names */
+  variantNames: [{{#each @def.x-combobox-variants}}'{{@key}}'{{#unless @last}}, {{/unless}}{{/each}}] as const,
+{{/if}}
+} as const;
+
+// =============================================================================
+// Entity Permissions (from x-permissions)
+// =============================================================================
+
+/** Permission configuration from swagger x-permissions */
+export interface EntityPermissionConfig {
+  /** Allow anonymous access */
+  anonymous?: boolean;
+  /** Roles that have access */
+  role?: string[];
+}
+
+/** Entity-level permissions for CRUD operations */
+export const entityPermissions = {
+  /** Permissions for viewing/querying this entity */
+  query: {{#if @def.x-permissions}}{ {{#if @def.x-permissions.anonymous}}anonymous: true{{else}}{{#if @def.x-permissions.role}}role: [{{#each @def.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}{}{{/if}}{{/if}} }{{else}}{}{{/if}} as EntityPermissionConfig,
+
+  /** Permissions for saving (create/update) this entity */
+  save: {{#if @def.x-save-permissions}}{ {{#if @def.x-save-permissions.anonymous}}anonymous: true{{else}}{{#if @def.x-save-permissions.role}}role: [{{#each @def.x-save-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}{}{{/if}}{{/if}} }{{else}}{{#if @def.x-permissions}}{ {{#if @def.x-permissions.anonymous}}anonymous: true{{else}}{{#if @def.x-permissions.role}}role: [{{#each @def.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}{}{{/if}}{{/if}} }{{else}}{}{{/if}}{{/if}} as EntityPermissionConfig,
+
+  /** Permissions for deleting this entity */
+  delete: {{#if @def.x-delete-permissions}}{ {{#if @def.x-delete-permissions.anonymous}}anonymous: true{{else}}{{#if @def.x-delete-permissions.role}}role: [{{#each @def.x-delete-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}{}{{/if}}{{/if}} }{{else}}{{#if @def.x-permissions}}{ {{#if @def.x-permissions.anonymous}}anonymous: true{{else}}{{#if @def.x-permissions.role}}role: [{{#each @def.x-permissions.role}}'{{this}}'{{#unless @last}}, {{/unless}}{{/each}}]{{else}}{}{{/if}}{{/if}} }{{else}}{}{{/if}}{{/if}} as EntityPermissionConfig,
+} as const;
+
+/** Check if a role has permission for an operation */
+export function hasPermission(
+  operation: keyof typeof entityPermissions,
+  userRole: string | null
+): boolean {
+  const perm = entityPermissions[operation];
+  if (perm.anonymous) return true;
+  if (!perm.role || perm.role.length === 0) return true;
+  if (!userRole) return false;
+  return perm.role.includes(userRole);
+}
+
+{{#if @def.x-external-sync}}
+// =============================================================================
+// External Sync Configuration
+// =============================================================================
+
+/** External sync source configuration */
+export interface ExternalSyncConfig {
+  /** Boolean field indicating sync is active */
+  indicatorField: string;
+  /** FK field linking to external record */
+  linkField?: string;
+  /** Model type of the linked external entity */
+  linkType?: string;
+  /** Field used to match records between systems */
+  matchField?: string;
+  /** User-facing message for readonly fields */
+  readonlyReason?: string;
+}
+
+/** External sync sources and their configuration */
+export const externalSync: Record<string, ExternalSyncConfig> = {
+{{#each @def.x-external-sync}}
+  '{{@key}}': {
+    indicatorField: '{{this.indicatorField}}',
+{{#if this.linkField}}    linkField: '{{this.linkField}}',
+{{/if}}{{#if this.linkType}}    linkType: '{{this.linkType}}',
+{{/if}}{{#if this.matchField}}    matchField: '{{this.matchField}}',
+{{/if}}{{#if this.readonlyReason}}    readonlyReason: '{{this.readonlyReason}}',
+{{/if}}  },
+{{/each}}
+};
+
+/** Get fields that are synced from a specific source */
+export const getSyncedFields = (sourceName: string): string[] => {
+  return fields.filter(f => f.syncedFrom === sourceName).map(f => f.name);
+};
+
+/** Check if entity has external sync enabled */
+export const hasExternalSync = true;
+{{else}}
+/** Check if entity has external sync enabled */
+export const hasExternalSync = false;
+
+/** External sync sources (empty for this entity) */
+export const externalSync: Record<string, never> = {};
+{{/if}}
+
+// =============================================================================
+// Field Definitions (pre-computed from schema properties)
+// =============================================================================
+
+/** Field type for form rendering */
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'combobox'
+  | 'multiselect'
+  | 'readonly'
+  | 'complex'
+  | 'images';
+
+/** Field definition from schema */
+export interface FieldDefinition {
+  name: string;
+  label: string;
+  type: FieldType;
+  fieldSet: string;
+  required: boolean;
+  readOnly: boolean;
+  editable: boolean;
+  isPrimaryKey: boolean;
+  isNavigationTarget: boolean;
+  isNavigationRelation: boolean;
+  navigationTarget?: string;
+  navigationVariant?: string;
+  navigationRelation?: string;
+  maxLength?: number;
+  minLength?: number;
+  minimum?: number;
+  maximum?: number;
+  format?: string;
+  hidden?: boolean;
+  sortOrder: number;
+  /** External sync source (e.g., 'oneWorldSync') - field becomes readonly when synced */
+  syncedFrom?: string;
+}
+
+/**
+ * Pre-computed field definitions from QueryModel schema
+ * Note: required is determined by minLength for strings
+ * Note: editable is true unless readOnly or x-navigation-relation
+ */
+export const fields: FieldDefinition[] = [
+{{#each @def.properties as |prop propName|}}
+  {
+    name: '{{propName}}',
+    label: '{{#if prop.x-label}}{{prop.x-label}}{{else}}{{propName}}{{/if}}',
+    type: {{#if prop.x-navigation-relation}}'readonly'{{else}}{{#if prop.x-navigation-target}}'combobox'{{else}}{{#if-eq prop.type "boolean"}}'boolean'{{else}}{{#if-eq prop.type "integer"}}'integer'{{else}}{{#if-eq prop.type "number"}}'number'{{else}}{{#if-eq prop.type "array"}}'complex'{{else}}{{#if-eq prop.format "date-time"}}'datetime'{{else}}{{#if-eq prop.format "date"}}'date'{{else}}{{#if prop.maxLength}}{{#if (compare prop.maxLength ">" 255)}}'textarea'{{else}}'text'{{/if}}{{else}}'text'{{/if}}{{/if-eq}}{{/if-eq}}{{/if-eq}}{{/if-eq}}{{/if-eq}}{{/if-eq}}{{/if}}{{/if}},
+    fieldSet: '{{#if prop.x-field-set}}{{prop.x-field-set}}{{else}}General{{/if}}',
+    required: {{#if prop.minLength}}true{{else}}false{{/if}},
+    readOnly: {{#if prop.x-navigation-relation}}true{{else}}{{#if prop.readOnly}}true{{else}}false{{/if}}{{/if}},
+    editable: {{#if prop.x-navigation-relation}}false{{else}}{{#if prop.readOnly}}false{{else}}true{{/if}}{{/if}},
+    isPrimaryKey: {{#if-eq propName @idProperty}}true{{else}}false{{/if-eq}},
+    isNavigationTarget: {{#if prop.x-navigation-target}}true{{else}}false{{/if}},
+    isNavigationRelation: {{#if prop.x-navigation-relation}}true{{else}}false{{/if}},
+{{#if prop.x-navigation-target}}    navigationTarget: '{{prop.x-navigation-target}}',
+{{/if}}{{#if prop.x-navigation-variant}}    navigationVariant: '{{prop.x-navigation-variant}}',
+{{/if}}{{#if prop.x-navigation-relation}}    navigationRelation: '{{prop.x-navigation-relation}}',
+{{/if}}{{#if prop.maxLength}}    maxLength: {{prop.maxLength}},
+{{/if}}{{#if prop.minLength}}    minLength: {{prop.minLength}},
+{{/if}}{{#if prop.minimum}}    minimum: {{prop.minimum}},
+{{/if}}{{#if prop.maximum}}    maximum: {{prop.maximum}},
+{{/if}}{{#if prop.format}}    format: '{{prop.format}}',
+{{/if}}{{#if-or prop.x-hidden prop.x-hidden-field}}    hidden: true,
+{{/if-or}}{{#if prop.x-synced-from}}    syncedFrom: '{{prop.x-synced-from}}',
+{{/if}}    sortOrder: {{#if prop.x-sort-order}}{{prop.x-sort-order}}{{else}}1000{{/if}},
+  },
+{{/each}}
+];
+
+// =============================================================================
+// Field Groupings
+// =============================================================================
+
+/** Fields grouped by fieldset name */
+export const fieldsByFieldSet = fields.reduce((acc, field) => {
+  if (!acc[field.fieldSet]) {
+    acc[field.fieldSet] = [];
+  }
+  acc[field.fieldSet].push(field);
+  return acc;
+}, {} as Record<string, FieldDefinition[]>);
+
+/** Ordered list of fieldset names (General first) */
+export const fieldSetOrder = [
+  'General',
+  ...Object.keys(fieldsByFieldSet).filter(fs => fs !== 'General').sort()
+];
+
+/** List of editable field names (from SaveModel) */
+export const editableFieldNames = fields
+  .filter(f => f.editable)
+  .map(f => f.name);
+
+/** Set of editable field names for quick lookup */
+export const editableFields = new Set(editableFieldNames);
+
+/** List of required field names */
+export const requiredFieldNames = fields
+  .filter(f => f.required)
+  .map(f => f.name);
+
+/** Navigation target fields (FK with combobox) */
+export const navigationTargetFields = fields
+  .filter(f => f.isNavigationTarget)
+  .map(f => ({ name: f.name, target: f.navigationTarget!, variant: f.navigationVariant }));
+
+/** Navigation relation fields (display text for FK) */
+export const navigationRelationFields = fields
+  .filter(f => f.isNavigationRelation)
+  .map(f => ({ name: f.name, relation: f.navigationRelation! }));
+
+// =============================================================================
+// Default Values
+// =============================================================================
+
+/** Default values for new entity (from x-default or schema defaults) */
+export const defaultValues: Partial<{{@entityNameSimple}}Entity> = {
+{{#each @def.properties as |prop propName|}}{{#if prop.x-default}}
+  {{propName}}: {{prop.x-default}},
+{{/if}}{{/each}}
+  // isActive defaults to true for new entities
+{{#if @def.properties.isActive}}
+  isActive: true,
+{{/if}}
+};
+
+// =============================================================================
+// Exports for Components
+// =============================================================================
+
+/** Complete form schema definition */
+export const {{@entityNameSimple}}FormSchema = {
+  querySchema,
+  saveSchema,
+  entityMeta,
+  entityPermissions,
+  hasPermission,
+  fields,
+  fieldsByFieldSet,
+  fieldSetOrder,
+  editableFields,
+  requiredFieldNames,
+  navigationTargetFields,
+  navigationRelationFields,
+  defaultValues,
+  externalSync,
+  hasExternalSync,
+};
+
+export default {{@entityNameSimple}}FormSchema;

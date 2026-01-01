@@ -1,0 +1,155 @@
+{{ import "_common/file_header.ts" }}
+
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { Panel } from 'primereact/panel';
+import { Button } from 'primereact/button';
+import { TabView, TabPanel } from 'primereact/tabview';
+import { Toast } from 'primereact/toast';
+
+import { 
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+  {{str-element entityName "." "@last"}}PropertyEditor,
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import type { 
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+  {{concat "I" (str-element entityName "." "@last")}},
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+} from '@/components/{{@namespace}}';
+
+import './index.scss';
+
+/**
+ * Demo UI page to showcase all PropertyEditor components
+ */
+export default function DemoPropertyEditors() {
+  const [activeTab, setActiveTab] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const toast = React.useRef<Toast>(null);
+
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+  const {{str-element entityName "." "@last"}}Form = useForm<{{concat "I" (str-element entityName "." "@last")}}>({
+    defaultValues: {
+      {{import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-key"}}: 0,{{#with (import template="_common/get-entity-property" def=entityDefinition targetProperty="x-navigation-value") as |valueProperty|}}{{#if valueProperty}}
+      {{valueProperty}}: '',{{/if}}{{/with}}
+      isActive: true,
+    }
+  });
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+
+  const handleSubmit = (formName: string) => (data: any) => {
+    console.log(`${formName} submitted:`, data);
+    toast.current?.show({
+      severity: 'success',
+      summary: 'Form Submitted',
+      detail: `${formName} data saved successfully`,
+      life: 3000,
+    });
+  };
+
+  const handleFieldChange = (formName: string) => (field: string, value: any) => {
+    console.log(`${formName}.${field} changed to:`, value);
+  };
+
+  return (
+    <div className="demo-property-editors-page p-4">
+      <Toast ref={toast} />
+      
+      <h1 className="text-2xl font-bold mb-4">PropertyEditor Components Demo</h1>
+      <p className="text-gray-600 mb-6">Showcase of all standardized property editor components for entity editing</p>
+
+      <TabView activeIndex={activeTab} onTabChange={(e) => setActiveTab(e.index)}>
+{{#each paths as |request uri| ~}}
+  {{~ #each request as |body httpMehtod| ~}}
+    {{~ #if body.x-query-set~}}
+        {{~ #if-any body.x-query-action "query"~}}  
+            {{~ #each @root.components.schemas as |entityDefinition entityName|~}}
+                {{~ #if-any entityName body.x-query-set}}
+        <TabPanel header="{{import template="_common/get-entity-name" body=body}}">
+          <form onSubmit={ {{str-element entityName "." "@last"}}Form.handleSubmit(handleSubmit('{{import template="_common/get-entity-name" body=body}}')) }>
+            <{{str-element entityName "." "@last"}}PropertyEditor<{{concat "I" (str-element entityName "." "@last")}}>
+              control={ {{str-element entityName "." "@last"}}Form.control}
+              setValue={ {{str-element entityName "." "@last"}}Form.setValue}
+              watch={ {{str-element entityName "." "@last"}}Form.watch}
+              errors={ {{str-element entityName "." "@last"}}Form.formState.errors}
+              columns={2}
+              loading={loading}
+              onFieldChange={handleFieldChange('{{import template="_common/get-entity-name" body=body}}')}
+            />
+            
+            <div className="flex gap-2 mt-4">
+              <Button type="submit" label="Save" icon="pi pi-check" className="p-button-success" />
+              <Button 
+                type="button" 
+                label="Reset" 
+                icon="pi pi-refresh" 
+                className="p-button-secondary" 
+                onClick={() => {{str-element entityName "." "@last"}}Form.reset()} 
+              />
+            </div>
+
+            {/* Debug: Current Values */}
+            <Panel header="Current Form Values" className="mt-4" toggleable collapsed>
+              <pre className="text-sm bg-gray-100 p-3 rounded overflow-auto max-h-64">
+                {JSON.stringify({{str-element entityName "." "@last"}}Form.watch(), null, 2)}
+              </pre>
+            </Panel>
+          </form>
+        </TabPanel>
+                {{/if-any~}}
+            {{~/each~}}
+        {{/if-any~}}
+    {{~/if~}}
+  {{~/each~}}
+{{~/each}}
+      </TabView>
+
+      {/* Demo Features Info */}
+      <Panel header="Demo Features" className="mt-4" toggleable collapsed>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><strong>Multiple Field Types:</strong> Text, number, boolean, date, dropdown, multiselect, textarea, and more</li>
+          <li><strong>Form Integration:</strong> React Hook Form with validation</li>
+          <li><strong>Grouped Properties:</strong> Organize fields into collapsible groups</li>
+          <li><strong>Grid Layout:</strong> Configurable column layouts (1-4 columns)</li>
+          <li><strong>Entity Lookups:</strong> Integrate ComboBox and MultiSelect components</li>
+          <li><strong>Conditional Visibility:</strong> Show/hide fields based on other values</li>
+          <li><strong>Custom Rendering:</strong> Override field rendering for special cases</li>
+          <li><strong>Loading State:</strong> Skeleton loading while data loads</li>
+          <li><strong>TypeScript Support:</strong> Full type safety throughout</li>
+        </ul>
+      </Panel>
+    </div>
+  );
+}
