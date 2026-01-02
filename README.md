@@ -344,6 +344,28 @@ const routes = buildAllEntityRoutes(entityConfigs, componentMap);
 - [ ] Run your generator with `swagger.json`
 - [ ] Verify with `npm run build`
 
+## Maintenance
+
+See **MAINTENANCE.md** for:
+- Adding new templates
+- Modifying existing templates
+- Template variable management
+- Runtime utility updates
+- Quality assurance and testing
+- Version control guidelines
+
+## Related Projects
+
+This template project is part of a suite of reusable project templates:
+
+| Project | Description |
+|---------|-------------|
+| `template-project/` | This project - TypeScript code generator templates |
+| `client-design-guide/` | UX patterns and architectural guidance |
+| `client-impersonation-react/` | Role impersonation template |
+
+Each project is standalone and can be used independently.
+
 ## Support
 
 | Document | Purpose |
@@ -353,3 +375,4 @@ const routes = buildAllEntityRoutes(entityConfigs, componentMap);
 | `docs/SCHEMA_METADATA.md` | Complete x-* extension reference |
 | `docs/TEMPLATE_GUIDE.md` | Template customization |
 | `docs/GENERATOR_CONFIG.md` | Generator setup |
+| `MAINTENANCE.md` | Template maintenance protocol |
